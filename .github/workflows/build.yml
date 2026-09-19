@@ -21,9 +21,17 @@ jobs:
       - name: Setup CMake
         uses: lukka/get-cmake@latest
 
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          vcpkg install spdlog:x64-windows
+
       - name: Configure CMake
-        run: cmake -S . -B build -A x64
-        
+        run: >
+          cmake -S . -B build -A x64
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+
       - name: Build Project
         run: cmake --build build --config Release --parallel
 
