@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive  # <--- Pastikan baris ini ada agar submodule ikut tertarik
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
