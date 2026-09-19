@@ -2,6 +2,7 @@
 #include <RE/Skyrim.h>
 #include <SKSE/Logger.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <exception>
 #include "HotbarManager.h"
 #include "InputHandler.h"
 #include "UIMenu.h"
@@ -10,7 +11,7 @@ void InitializeLog()
 {
     auto path = SKSE::log::log_directory();
     if (!path) {
-        stl::report_and_fail("Failed to find standard logging directory"sv);
+        return;
     }
     *path /= "MMOHotbar.log";
     auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
