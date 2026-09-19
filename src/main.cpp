@@ -3,8 +3,8 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include "HotbarManager.h"
 #include "InputHandler.h"
+#include "UIMenu.h"
 
-// Inisialisasi sistem log profesional (tersimpan di My Games/Skyrim Special Edition/SKSE/)
 void InitializeLog() {
     auto path = logger::log_directory();
     if (!path) {
@@ -19,13 +19,18 @@ void InitializeLog() {
     spdlog::set_pattern("[%l] %v"s);
 }
 
-// SKSE Messaging Listener untuk keamanan inisialisasi saat game siap
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message) {
     switch (message->type) {
     case SKSE::MessagingInterface::kDataLoaded:
-        logger::info("Skyrim data loaded. Initializing Hotbar and Input Listeners...");
+        logger::info("Skyrim data loaded. Initializing MMOHotbar systems...");
         HotbarManager::GetSingleton()->Init();
+        HotbarManager::GetSingleton()->LoadConfig(); // Memuat data dari JSON
         InputHandler::Register();
+        UIMenu::Register();
+        break;
+    case SKSE::MessagingInterface::kPostLoadGame:
+    case SKSE::MessagingInterface::kNewGame:
+        logger::info("Game loaded/New game started. Ensuring hotbar states are synced.");
         break;
     }
 }
