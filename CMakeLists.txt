@@ -30,6 +30,7 @@ endif()
 
 include(FetchContent)
 
+# 1. Fetch CommonLibSSE-NG
 FetchContent_Declare(
     CommonLibSSE
     GIT_REPOSITORY https://github.com/CharmedBaryon/CommonLibSSE-NG.git
@@ -38,7 +39,15 @@ FetchContent_Declare(
     GIT_SUBMODULES_RECURSE TRUE
 )
 
-FetchContent_MakeAvailable(CommonLibSSE)
+# 2. Fetch nlohmann/json secara resmi agar header selalu tersedia
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(CommonLibSSE nlohmann_json)
 
 add_library(MMOHotbar SHARED
     src/main.cpp
@@ -50,4 +59,5 @@ add_library(MMOHotbar SHARED
 target_link_libraries(MMOHotbar
     PRIVATE
         CommonLibSSE::CommonLibSSE
+        nlohmann_json::nlohmann_json
 )
