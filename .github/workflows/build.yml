@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-2022
     env:
       VCPKG_ROOT: C:/vcpkg
-      VCPKG_DEFAULT_TRIPLET: x64-windows
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
       - name: Checkout Repository
@@ -42,14 +42,14 @@ jobs:
           path: |
             C:/vcpkg/installed
             ${{ github.workspace }}/build/_deps
-          key: ${{ runner.os }}-vcpkg-cache-${{ hashFiles('CMakeLists.txt') }}
+          key: ${{ runner.os }}-vcpkg-static-cache-${{ hashFiles('CMakeLists.txt') }}
           restore-keys: |
-            ${{ runner.os }}-vcpkg-cache-
+            ${{ runner.os }}-vcpkg-static-cache-
 
       - name: Install dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT\vcpkg.exe" install rapidcsv:x64-windows spdlog:x64-windows catch2:x64-windows nlohmann-json:x64-windows xbyak:x64-windows
+          & "$env:VCPKG_ROOT\vcpkg.exe" install rapidcsv:x64-windows-static spdlog:x64-windows-static catch2:x64-windows-static nlohmann-json:x64-windows-static xbyak:x64-windows-static
 
       - name: Configure CMake
         shell: pwsh
@@ -57,7 +57,7 @@ jobs:
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DENABLE_TESTS=OFF `
             -DBUILD_TESTING=OFF
 
