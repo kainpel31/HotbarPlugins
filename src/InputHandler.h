@@ -12,10 +12,8 @@ public:
 
     RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_eventSource) override {
         if (!a_event) return RE::BSEventNotifyControl::kContinue;
-
         if (a_event->menuName == RE::InventoryMenu::MENU_NAME) {
             g_IsInInventoryMenu = a_event->opening;
-            logger::info("Inventory Menu status changed: {}", g_IsInInventoryMenu ? "Opened" : "Closed");
         }
         return RE::BSEventNotifyControl::kContinue;
     }
@@ -36,6 +34,8 @@ public:
     RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event, RE::BSTEventSource<RE::InputEvent*>* a_eventSource) override {
         if (!a_event || !*a_event) return RE::BSEventNotifyControl::kContinue;
 
+        auto manager = HotbarManager::GetSingleton();
+
         for (auto event = *a_event; event; event = event->next) {
             auto button = event->AsButtonEvent();
             if (!button) continue;
@@ -43,27 +43,31 @@ public:
             std::uint32_t key = button->GetIDCode();
             bool isPressed = button->IsPressed();
 
-            // Tombol 'X' (ScanCode: 45) untuk Toggle Preset
-            if (isPressed && key == 45) {
-                HotbarManager::GetSingleton()->TogglePreset();
+            // Cek tombol Toggle Preset dinamis dari menu
+            if (isPressed && key == manager->GetPresetKey()) {
+                manager->TogglePreset();
             }
 
-            // Tombol 'Ctrl' kiri/kanan (ScanCode: 29 atau 157)
-            if (key == 29 || key == 157) {
+            // Cek tombol Modifier Ctrl dinamis dari menu
+            if (key == manager->GetModifierKey()) {
                 g_IsCtrlHeld = isPressed;
             }
 
             // Tombol angka 1 sampai 0, -, = (ScanCode: 2 sampai 13)
             if (isPressed && key >= 2 && key <= 13) {
-                int baseSlot = static_cast<int>(key - 2); // 0 - 11
-                int currentPreset = HotbarManager::GetSingleton()->GetCurrentPreset();
+                int baseSlot = static_cast<int>(key - 2);
+                
+                // Batasi hanya sesuai jumlah slot aktif yang diatur di menu slider
+                if (baseSlot >= manager->GetActiveSlotCount()) continue;
+
+                int currentPreset = manager->GetCurrentPreset();
                 int targetSlot = (currentPreset == 2) ? (baseSlot + 12) : baseSlot;
 
                 if (MenuOpenCloseListener::GetSingleton()->IsInInventory() && g_IsCtrlHeld) {
-                    HotbarManager::GetSingleton()->BindItemFromInventory(targetSlot);
+                    manager->BindItemFromInventory(targetSlot);
                 } 
                 else if (!MenuOpenCloseListener::GetSingleton()->IsInInventory()) {
-                    HotbarManager::GetSingleton()->ExecuteAction(targetSlot);
+                    manager->ExecuteAction(targetSlot);
                 }
             }
         }
@@ -86,6 +90,5 @@ public:
         if (ui) {
             ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(MenuOpenCloseListener::GetSingleton());
         }
-        logger::info("InputHandler event sinks registered successfully.");
     }
 };
