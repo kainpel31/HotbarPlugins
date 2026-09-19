@@ -13,13 +13,13 @@ endif()
 
 include(FetchContent)
 
-# Correct repository:
-# https://github.com/CharmedBaryon/CommonLibSSE-NG
+# Menggunakan URL repository yang benar dari CharmedBaryon dengan submodule otomatis
 FetchContent_Declare(
     CommonLibSSE
     GIT_REPOSITORY https://github.com/CharmedBaryon/CommonLibSSE-NG.git
     GIT_TAG main
     GIT_SHALLOW TRUE
+    GIT_SUBMODULES_RECURSE TRUE  # <--- INI KUNCI PENTINGNYA AGAR RAPIDCSV IKUT TERUNDUH
 )
 
 FetchContent_MakeAvailable(CommonLibSSE)
