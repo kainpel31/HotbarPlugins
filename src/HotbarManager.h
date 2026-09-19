@@ -13,7 +13,9 @@
 
 struct HotbarSlotData {
     std::string name = "Kosong";
+    std::string iconPath;
     std::uint32_t formID = 0;
+    std::uint32_t formType = 0;
     int slotType = 0;
 };
 
@@ -72,6 +74,82 @@ public:
         }
     }
 
+    std::string ResolveIconPath(const RE::TESForm* a_form) const
+    {
+        if (!a_form) {
+            return {};
+        }
+
+        if (auto* weapon = a_form->As<RE::TESObjectWEAP>()) {
+            return weapon->GetName() ? std::string("weapon") : std::string{};
+        }
+
+        if (auto* armor = a_form->As<RE::TESObjectARMO>()) {
+            return armor->GetName() ? std::string("armor") : std::string{};
+        }
+
+        if (auto* misc = a_form->As<RE::TESObjectMISC>()) {
+            return misc->GetName() ? std::string("misc") : std::string{};
+        }
+
+        if (auto* spell = a_form->As<RE::SpellItem>()) {
+            return spell->GetName() ? std::string("spell") : std::string{};
+        }
+
+        if (auto* shout = a_form->As<RE::TESShout>()) {
+            return shout->GetName() ? std::string("shout") : std::string{};
+        }
+
+        return {};
+    }
+
+    bool BindSelectedInventoryItem(int slotIndex)
+    {
+        std::scoped_lock lock(_lock);
+        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) {
+            return false;
+        }
+
+        auto ui = RE::UI::GetSingleton();
+        if (!ui || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
+            return false;
+        }
+
+        auto menu = ui->GetMenu<RE::InventoryMenu>();
+        if (!menu) {
+            return false;
+        }
+
+        auto* inventoryList = menu->GetRuntimeData().itemList;
+        if (!inventoryList) {
+            return false;
+        }
+
+        auto* selected = inventoryList->GetSelectedItem();
+        if (!selected || !selected->data.objDesc) {
+            return false;
+        }
+
+        auto* form = selected->data.objDesc->GetObject();
+        if (!form) {
+            return false;
+        }
+
+        auto* tesForm = form->As<RE::TESForm>();
+        if (!tesForm) {
+            return false;
+        }
+
+        _slots[slotIndex].formID = tesForm->GetFormID();
+        _slots[slotIndex].formType = static_cast<std::uint32_t>(tesForm->GetFormType());
+        _slots[slotIndex].name = tesForm->GetName() ? tesForm->GetName() : "Unnamed";
+        _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
+        _slots[slotIndex].slotType = 0;
+
+        SaveConfig();
+        return true;
+    }
+
     void SaveConfig()
     {
         std::scoped_lock lock(_lock);
@@ -90,6 +168,8 @@ public:
                 {"index", i},
                 {"name", _slots[i].name},
                 {"formID", _slots[i].formID},
+                {"formType", _slots[i].formType},
+                {"iconPath", _slots[i].iconPath},
                 {"slotType", _slots[i].slotType}
             });
         }
@@ -132,6 +212,8 @@ public:
                     if (index >= 0 && index < static_cast<int>(_slots.size())) {
                         _slots[index].name = slot.value("name", "Kosong");
                         _slots[index].formID = slot.value("formID", 0u);
+                        _slots[index].formType = slot.value("formType", 0u);
+                        _slots[index].iconPath = slot.value("iconPath", "");
                         _slots[index].slotType = slot.value("slotType", 0);
                     }
                 }
@@ -141,26 +223,6 @@ public:
         }
     }
 
-    void BindItemFromInventory(int slotIndex)
-    {
-        std::scoped_lock lock(_lock);
-        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) return;
-
-        auto ui = RE::UI::GetSingleton();
-        if (!ui || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) return;
-        auto player = RE::PlayerCharacter::GetSingleton();
-        if (!player) return;
-
-        auto target = player->GetEquippedObject(false);
-        if (!target) return;
-
-        _slots[slotIndex].formID = target->GetFormID();
-        const auto* name = target->GetName();
-        _slots[slotIndex].name = name && *name ? name : "Unnamed";
-        _slots[slotIndex].slotType = 2;
-        SaveConfig();
-    }
-
     void ExecuteAction(int slotIndex)
     {
         std::scoped_lock lock(_lock);
@@ -168,12 +230,23 @@ public:
 
         auto& slot = _slots[slotIndex];
         if (slot.formID == 0) return;
+
         auto player = RE::PlayerCharacter::GetSingleton();
         auto form = RE::TESForm::LookupByID(slot.formID);
         auto equipManager = RE::ActorEquipManager::GetSingleton();
         if (!player || !form || !equipManager) return;
 
-        if (auto boundObject = form->As<RE::TESBoundObject>()) {
+        if (auto* spell = form->As<RE::SpellItem>()) {
+            equipManager->EquipSpell(player, spell, nullptr);
+            return;
+        }
+
+        if (auto* shout = form->As<RE::TESShout>()) {
+            equipManager->EquipShout(player, shout);
+            return;
+        }
+
+        if (auto* boundObject = form->As<RE::TESBoundObject>()) {
             equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
         }
     }
