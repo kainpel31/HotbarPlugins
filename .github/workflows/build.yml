@@ -67,11 +67,12 @@ jobs:
         run: |
           cmake --build build --config Release --parallel
 
-      - name: Upload Artifact
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: MMO-Hotbar-Plugin
           path: |
-            build/**/*.dll
-            build/**/*.pdb
+            build/MMOHotbar.dll
+            build/MMOHotbar.pdb
           if-no-files-found: error
+          compression-level: 6
