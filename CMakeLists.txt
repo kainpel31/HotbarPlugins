@@ -4,12 +4,12 @@ project(MMOHotbar VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Menggunakan FetchContent untuk mendownload CommonLibSSE secara otomatis
+# Menggunakan CommonLibNG yang stabil dan publik
 include(FetchContent)
 FetchContent_Declare(
     CommonLibSSE
-    GIT_REPOSITORY https://github.com/unsafestring/CommonLibSSE.git
-    GIT_TAG master # atau main, sesuaikan dengan branch utama commonlibsse
+    GIT_REPOSITORY https://github.com/CommonLibNG/CommonLibNG.git
+    GIT_TAG master
 )
 FetchContent_MakeAvailable(CommonLibSSE)
 
