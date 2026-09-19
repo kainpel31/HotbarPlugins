@@ -4,6 +4,7 @@
 #include <RE/Skyrim.h>
 #include <SKSE/Logger.h>
 #include <array>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -66,12 +67,26 @@ public:
         if (slot >= 0 && slot < 12) _slotKeys[slot] = key;
     }
 
+    // Integrasi Standar I4 / Mapping Icon Berbasis FormID
     std::string ResolveIconPath(const RE::TESForm* a_form) const
     {
         if (!a_form) return {};
-        // The form ID is retained for the icon resolver/render cache. A custom
-        // inventory icon must be resolved from the same injector/asset mapping
-        // used by the inventory UI; it cannot be reconstructed from a label.
+
+        std::uint32_t formID = a_form->GetFormID();
+        std::string formIDStr = fmt::format("{:08X}", formID);
+
+        // Contoh pembacaan database I4 / JSON eksternal
+        std::ifstream iconFile("Data/SKSE/Plugins/I4/IconMapping.json");
+        if (iconFile.is_open()) {
+            try {
+                nlohmann::json j;
+                iconFile >> j;
+                if (j.contains("icons") && j["icons"].contains(formIDStr)) {
+                    return j["icons"][formIDStr].get<std::string>();
+                }
+            } catch (...) {}
+        }
+
         return {};
     }
 
@@ -104,6 +119,35 @@ public:
         return true;
     }
 
+    bool BindSelectedMagicItem(int slotIndex)
+    {
+        std::scoped_lock lock(_lock);
+        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) return false;
+
+        auto ui = RE::UI::GetSingleton();
+        if (!ui || !ui->IsMenuOpen(RE::MagicMenu::MENU_NAME)) return false;
+        auto magicMenu = ui->GetMenu<RE::MagicMenu>();
+        if (!magicMenu || !magicMenu->uiMovie) return false;
+
+        RE::GFxValue selection;
+        if (magicMenu->uiMovie->GetVariable(&selection, "_root.Menu_mc.inventoryLists.itemList.selectedEntry.formId")) {
+            if (selection.IsNumber()) {
+                std::uint32_t formID = static_cast<std::uint32_t>(selection.GetNumber());
+                auto* tesForm = RE::TESForm::LookupByID(formID);
+                if (tesForm) {
+                    _slots[slotIndex].formID = tesForm->GetFormID();
+                    _slots[slotIndex].formType = static_cast<std::uint32_t>(tesForm->GetFormType());
+                    _slots[slotIndex].name = tesForm->GetName() ? tesForm->GetName() : "Unnamed Spell";
+                    _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
+                    _slots[slotIndex].slotType = 0;
+                    SaveConfig();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     void SaveConfig()
     {
         std::scoped_lock lock(_lock);
@@ -115,6 +159,7 @@ public:
         json["presetToggleKey"] = _presetToggleKey;
         json["bindModifierKey"] = _bindModifierKey;
         json["slotKeys"] = _slotKeys;
+        
         auto slots = nlohmann::json::array();
         for (std::size_t i = 0; i < _slots.size(); ++i) {
             slots.push_back({
@@ -176,7 +221,6 @@ public:
         auto equipManager = RE::ActorEquipManager::GetSingleton();
         if (!player || !form || !equipManager) return;
 
-        // AlchemyItem covers potions, poisons, food and other consumables.
         if (auto* consumable = form->As<RE::AlchemyItem>()) {
             player->DrinkPotion(consumable, nullptr);
             return;
