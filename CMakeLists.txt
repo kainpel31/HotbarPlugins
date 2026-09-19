@@ -23,11 +23,19 @@ set(MMO_HOTBAR_VERSION "1.0.0" CACHE STRING "Project version override")
 project(MMOHotbar VERSION ${MMO_HOTBAR_VERSION} LANGUAGES CXX)
 
 if (MSVC)
-    add_compile_definitions(_UNICODE)
+    add_compile_definitions(_UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
     add_compile_options(/MP)
 endif ()
 
 include(FetchContent)
+
+# CommonLibSSE-NG defaults BUILD_TESTS to ON. Disable it before making the
+# dependency available; otherwise its own tests are compiled with the vcpkg
+# fmt version and can fail independently of this plugin.
+set(BUILD_TESTS OFF CACHE BOOL "Disable CommonLibSSE-NG tests" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "Disable project tests" FORCE)
+set(ENABLE_TESTS OFF CACHE BOOL "Disable project tests" FORCE)
+
 FetchContent_Declare(
     CommonLibSSE
     GIT_REPOSITORY https://github.com/CharmedBaryon/CommonLibSSE-NG.git
