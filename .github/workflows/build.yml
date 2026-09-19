@@ -10,12 +10,15 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    env:
+      VCPKG_ROOT: C:/vcpkg
+      VCPKG_DEFAULT_TRIPLET: x64-windows
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive  # <--- Pastikan baris ini ada agar submodule ikut tertarik
+          submodules: recursive
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -23,18 +26,29 @@ jobs:
       - name: Setup CMake
         uses: lukka/get-cmake@latest
 
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:VCPKG_ROOT")) {
+            throw "vcpkg not found at $env:VCPKG_ROOT"
+          }
+          if (-not (Test-Path "$env:VCPKG_ROOT\vcpkg.exe")) {
+            throw "vcpkg.exe not found at $env:VCPKG_ROOT\vcpkg.exe"
+          }
+
       - name: Install dependencies
         shell: pwsh
         run: |
-          vcpkg install spdlog:x64-windows catch2:x64-windows
+          & "$env:VCPKG_ROOT\vcpkg.exe" install spdlog:x64-windows catch2:x64-windows
 
       - name: Configure CMake
         shell: pwsh
         run: |
-          cmake -S . -B build -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DENABLE_TESTS=OFF`
+            -DENABLE_TESTS=OFF `
             -DBUILD_TESTING=OFF
 
       - name: Build Project
@@ -46,5 +60,68 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MMO-Hotbar-Plugin
-          path: build/Release/*.dll
+          path: build/**/*.dll
+          if-no-files-found: errorname: Build Skyrim SKSE Plugin
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      VCPKG_ROOT: C:/vcpkg
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:VCPKG_ROOT")) {
+            throw "vcpkg not found at $env:VCPKG_ROOT"
+          }
+          if (-not (Test-Path "$env:VCPKG_ROOT\vcpkg.exe")) {
+            throw "vcpkg.exe not found at $env:VCPKG_ROOT\vcpkg.exe"
+          }
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install spdlog:x64-windows catch2:x64-windows
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DENABLE_TESTS=OFF `
+            -DBUILD_TESTING=OFF
+
+      - name: Build Project
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MMO-Hotbar-Plugin
+          path: build/**/*.dll
           if-no-files-found: error
