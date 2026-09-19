@@ -34,6 +34,7 @@ jobs:
           cmake -S . -B build -A x64 `
             -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DENABLE_TESTS=OFF`
             -DBUILD_TESTING=OFF
 
       - name: Build Project
