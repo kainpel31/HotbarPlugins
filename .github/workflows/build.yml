@@ -36,7 +36,6 @@ jobs:
             throw "vcpkg.exe not found at $env:VCPKG_ROOT\vcpkg.exe"
           }
 
-      # 1. TAMBAHAN: Cache untuk vcpkg installed packages & folder build dependencies CMake
       - name: Cache vcpkg and Build Dependencies
         uses: actions/cache@v4
         with:
@@ -72,7 +71,7 @@ jobs:
         with:
           name: MMO-Hotbar-Plugin
           path: |
-            build/MMOHotbar.dll
-            build/MMOHotbar.pdb
+            build/Release/MMOHotbar.dll
+            build/Release/MMOHotbar.pdb
           if-no-files-found: error
           compression-level: 6
