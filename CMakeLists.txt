@@ -11,15 +11,18 @@ if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
 
+# Matikan test CommonLibSSE agar tidak mencari rapidcsv yang tidak perlu
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+
 include(FetchContent)
 
-# Menggunakan URL repository yang benar dari CharmedBaryon dengan submodule otomatis
 FetchContent_Declare(
     CommonLibSSE
     GIT_REPOSITORY https://github.com/CharmedBaryon/CommonLibSSE-NG.git
     GIT_TAG main
     GIT_SHALLOW TRUE
-    GIT_SUBMODULES_RECURSE TRUE  # <--- INI KUNCI PENTINGNYA AGAR RAPIDCSV IKUT TERUNDUH
+    GIT_SUBMODULES_RECURSE TRUE
 )
 
 FetchContent_MakeAvailable(CommonLibSSE)
