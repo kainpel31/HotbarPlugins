@@ -6,14 +6,14 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Required by FetchContent when extracting downloaded dependencies.
+# Wajib untuk kebijakan FetchContent
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
 
-# Matikan test CommonLibSSE agar tidak mencari rapidcsv yang tidak perlu
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+# Paksa matikan seluruh fitur test di CommonLibSSE-NG agar tidak mencari rapidcsv
+set(ENABLE_TESTS OFF CACHE BOOL "Disable tests" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "Disable testing" FORCE)
 
 include(FetchContent)
 
