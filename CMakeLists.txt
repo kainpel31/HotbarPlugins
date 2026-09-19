@@ -4,12 +4,13 @@ project(MMOHotbar VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Menggunakan CommonLibNG yang stabil dan publik
+# Menggunakan FetchContent dengan opsi shallow clone untuk menghindari prompt kredensial
 include(FetchContent)
 FetchContent_Declare(
     CommonLibSSE
-    GIT_REPOSITORY https://github.com/CommonLibNG/CommonLibNG.git
+    GIT_REPOSITORY https://github.com/CommonLibSSE-NG/CommonLibSSE-NG.git
     GIT_TAG master
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(CommonLibSSE)
 
