@@ -1,93 +1,92 @@
 #pragma once
+
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
 #include "HotbarManager.h"
 
-class MenuOpenCloseListener : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
+class MenuOpenCloseListener final : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
 public:
-    static MenuOpenCloseListener* GetSingleton() {
+    static MenuOpenCloseListener* GetSingleton()
+    {
         static MenuOpenCloseListener singleton;
         return &singleton;
     }
 
-    RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_eventSource) override {
-        if (!a_event) return RE::BSEventNotifyControl::kContinue;
-        if (a_event->menuName == RE::InventoryMenu::MENU_NAME) {
-            g_IsInInventoryMenu = a_event->opening;
+    RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+    {
+        if (event && event->menuName == RE::InventoryMenu::MENU_NAME) {
+            _inventoryOpen = event->opening;
         }
         return RE::BSEventNotifyControl::kContinue;
     }
 
-    bool IsInInventory() const { return g_IsInInventoryMenu; }
+    bool IsInventoryOpen() const { return _inventoryOpen; }
 
 private:
-    bool g_IsInInventoryMenu = false;
+    bool _inventoryOpen = false;
 };
 
-class HotbarInputListener : public RE::BSTEventSink<RE::InputEvent*> {
+class HotbarInputListener final : public RE::BSTEventSink<RE::InputEvent*> {
 public:
-    static HotbarInputListener* GetSingleton() {
+    static HotbarInputListener* GetSingleton()
+    {
         static HotbarInputListener singleton;
         return &singleton;
     }
 
-    RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event, RE::BSTEventSource<RE::InputEvent*>* a_eventSource) override {
-        if (!a_event || !*a_event) return RE::BSEventNotifyControl::kContinue;
-
+    RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* events, RE::BSTEventSource<RE::InputEvent*>*) override
+    {
+        if (!events || !*events) return RE::BSEventNotifyControl::kContinue;
         auto manager = HotbarManager::GetSingleton();
 
-        for (auto event = *a_event; event; event = event->next) {
-            auto button = event->AsButtonEvent();
-            if (!button) continue;
+        for (auto* event = *events; event; event = event->next) {
+            auto* button = event->AsButtonEvent();
+            if (!button || button->GetDevice() != RE::INPUT_DEVICE::kKeyboard) continue;
 
-            std::uint32_t key = button->GetIDCode();
-            bool isPressed = button->IsPressed();
+            const auto key = button->GetIDCode();
+            if (key == manager->GetBindModifierKey()) {
+                _modifierHeld = button->IsPressed() || button->IsHeld();
+                continue;
+            }
 
-            // Cek tombol Toggle Preset dinamis dari menu
-            if (isPressed && key == manager->GetPresetKey()) {
+            if (!button->IsPressed()) continue;
+
+            if (key == manager->GetPresetToggleKey()) {
                 manager->TogglePreset();
+                continue;
             }
 
-            // Cek tombol Modifier Ctrl dinamis dari menu
-            if (key == manager->GetModifierKey()) {
-                g_IsCtrlHeld = isPressed;
-            }
-
-            // Tombol angka 1 sampai 0, -, = (ScanCode: 2 sampai 13)
-            if (isPressed && key >= 2 && key <= 13) {
-                int baseSlot = static_cast<int>(key - 2);
-                
-                // Batasi hanya sesuai jumlah slot aktif yang diatur di menu slider
-                if (baseSlot >= manager->GetActiveSlotCount()) continue;
-
-                int currentPreset = manager->GetCurrentPreset();
-                int targetSlot = (currentPreset == 2) ? (baseSlot + 12) : baseSlot;
-
-                if (MenuOpenCloseListener::GetSingleton()->IsInInventory() && g_IsCtrlHeld) {
-                    manager->BindItemFromInventory(targetSlot);
-                } 
-                else if (!MenuOpenCloseListener::GetSingleton()->IsInInventory()) {
-                    manager->ExecuteAction(targetSlot);
+            int slot = -1;
+            for (int i = 0; i < 12; ++i) {
+                if (manager->GetSlotKey(i) == key) {
+                    slot = i;
+                    break;
                 }
+            }
+            if (slot < 0 || slot >= manager->GetActiveSlotCount()) continue;
+
+            const int slotIndex = manager->GetCurrentPreset() == 2 ? slot + 12 : slot;
+            if (MenuOpenCloseListener::GetSingleton()->IsInventoryOpen() && _modifierHeld) {
+                manager->BindItemFromInventory(slotIndex);
+            } else if (!MenuOpenCloseListener::GetSingleton()->IsInventoryOpen()) {
+                manager->ExecuteAction(slotIndex);
             }
         }
         return RE::BSEventNotifyControl::kContinue;
     }
 
 private:
-    bool g_IsCtrlHeld = false;
+    bool _modifierHeld = false;
 };
 
 class InputHandler {
 public:
-    static void Register() {
-        auto inputDeviceMgr = RE::BSInputDeviceManager::GetSingleton();
-        if (inputDeviceMgr) {
-            inputDeviceMgr->AddEventSink(HotbarInputListener::GetSingleton());
+    static void Register()
+    {
+        if (auto input = RE::BSInputDeviceManager::GetSingleton()) {
+            input->AddEventSink(HotbarInputListener::GetSingleton());
         }
-
-        auto ui = RE::UI::GetSingleton();
-        if (ui) {
+        if (auto ui = RE::UI::GetSingleton()) {
             ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(MenuOpenCloseListener::GetSingleton());
         }
     }
