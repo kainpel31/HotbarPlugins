@@ -14,16 +14,22 @@ public:
 
     RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
     {
-        if (event && event->menuName == RE::InventoryMenu::MENU_NAME) {
-            _inventoryOpen = event->opening;
+        if (event) {
+            if (event->menuName == RE::InventoryMenu::MENU_NAME) {
+                _inventoryOpen = event->opening;
+            } else if (event->menuName == RE::MagicMenu::MENU_NAME) {
+                _magicOpen = event->opening;
+            }
         }
         return RE::BSEventNotifyControl::kContinue;
     }
 
     bool IsInventoryOpen() const { return _inventoryOpen; }
+    bool IsMagicOpen() const { return _magicOpen; }
 
 private:
     bool _inventoryOpen = false;
+    bool _magicOpen = false;
 };
 
 class HotbarInputListener final : public RE::BSTEventSink<RE::InputEvent*> {
@@ -38,6 +44,7 @@ public:
     {
         if (!events || !*events) return RE::BSEventNotifyControl::kContinue;
         auto manager = HotbarManager::GetSingleton();
+        auto menuState = MenuOpenCloseListener::GetSingleton();
 
         for (auto* event = *events; event; event = event->next) {
             auto* button = event->AsButtonEvent();
@@ -66,9 +73,14 @@ public:
             if (slot < 0 || slot >= manager->GetActiveSlotCount()) continue;
 
             const int slotIndex = manager->GetCurrentPreset() == 2 ? slot + 12 : slot;
-            if (MenuOpenCloseListener::GetSingleton()->IsInventoryOpen() && _modifierHeld) {
-                manager->BindSelectedInventoryItem(slotIndex);
-            } else if (!MenuOpenCloseListener::GetSingleton()->IsInventoryOpen()) {
+            
+            if (_modifierHeld) {
+                if (menuState->IsInventoryOpen()) {
+                    manager->BindSelectedInventoryItem(slotIndex);
+                } else if (menuState->IsMagicOpen()) {
+                    manager->BindSelectedMagicItem(slotIndex);
+                }
+            } else if (!menuState->IsInventoryOpen() && !menuState->IsMagicOpen()) {
                 manager->ExecuteAction(slotIndex);
             }
         }
