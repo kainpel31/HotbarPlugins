@@ -1,5 +1,10 @@
 #pragma once
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <algorithm>
 #include <imgui.h>
 #include <string>
 #include "HotbarManager.h"
@@ -66,7 +71,7 @@ namespace UIMenu {
         if (slots.size() < 24) return;
 
         auto* drawList = ImGui::GetForegroundDrawList();
-        const auto display = ImGui::GetIO().DisplaySize;
+        const ImVec2 display = ImGui::GetIO().DisplaySize;
         const int count = manager->GetActiveSlotCount();
         const int offset = manager->GetCurrentPreset() == 2 ? 12 : 0;
         const float width = count * 45.0f;
@@ -74,13 +79,13 @@ namespace UIMenu {
         const float startY = display.y * manager->GetPosY();
 
         for (int i = 0; i < count; ++i) {
-            const ImVec2 min(startX + i * 45.0f, startY);
-            const ImVec2 max(min.x + 40.0f, min.y + 40.0f);
+            const ImVec2 boxMin(startX + i * 45.0f, startY);
+            const ImVec2 boxMax(boxMin.x + 40.0f, boxMin.y + 40.0f);
             const auto color = slots[offset + i].formID != 0 ? IM_COL32(50, 150, 50, 180) : IM_COL32(50, 50, 50, 150);
-            drawList->AddRectFilled(min, max, color, 4.0f);
-            drawList->AddRect(min, max, IM_COL32(255, 255, 255, 200), 4.0f);
+            drawList->AddRectFilled(boxMin, boxMax, color, 4.0f);
+            drawList->AddRect(boxMin, boxMax, IM_COL32(255, 255, 255, 200), 4.0f);
             const auto text = std::to_string(i + 1);
-            drawList->AddText(ImVec2(min.x + 15.0f, min.y + 12.0f), IM_COL32(255, 255, 255, 255), text.c_str());
+            drawList->AddText(ImVec2(boxMin.x + 15.0f, boxMin.y + 12.0f), IM_COL32(255, 255, 255, 255), text.c_str());
         }
     }
 
