@@ -40,6 +40,11 @@ set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "")
 set(MMO_HOTBAR_VERSION "1.0.0" CACHE STRING "Project version override")
 
+# ---- Policy CMP0135 for FetchContent ----
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
 # ---- Project ----
 project(
 	MMOHotbar
@@ -60,7 +65,20 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 set(Boost_USE_STATIC_LIBS ON)
 
 # ---- Dependencies ----
-find_package(CommonLibSSE CONFIG REQUIRED)
+include(FetchContent)
+
+# Menggunakan FetchContent untuk CommonLibSSE-NG agar otomatis aman di GitHub Actions
+FetchContent_Declare(
+    CommonLibSSE
+    GIT_REPOSITORY https://github.com/CharmedBaryon/CommonLibSSE-NG.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+    GIT_SUBMODULES_RECURSE TRUE
+)
+
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(CommonLibSSE)
+
 find_package(spdlog REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED CONFIG)
 find_package(xbyak REQUIRED CONFIG)
