@@ -37,12 +37,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(CommonLibSSE)
 
-# Download the framework SDK headers and ImGui headers only. The framework DLL
-# is supplied by the installed SKSE-Menu-Framework-3 mod at runtime.
+# The framework repository uses master, not main. Only its ImGui headers are
+# needed at compile time; SKSEMenuFramework.dll is supplied by the installed
+# framework mod at runtime.
 FetchContent_Declare(
     SKSEMenuFrameworkSDK
     GIT_REPOSITORY https://github.com/QTR-Modding/SKSE-Menu-Framework-3.git
-    GIT_TAG main
+    GIT_TAG master
     GIT_SHALLOW TRUE
 )
 FetchContent_Populate(SKSEMenuFrameworkSDK)
@@ -60,7 +61,7 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    "${sksemframeworksdk_SOURCE_DIR}/imgui"
+    "${sksemenuframeworksdk_SOURCE_DIR}/imgui"
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE
     CommonLibSSE::CommonLibSSE
