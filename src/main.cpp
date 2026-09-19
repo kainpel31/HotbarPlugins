@@ -1,11 +1,13 @@
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 // Struktur Data untuk 24 Slot Hotbar
 struct HotbarSlot {
     std::string name = "Kosong";
-    uint32_t formID = 0;
+    std::uint32_t formID = 0;
     int slotType = 0;
 };
 
@@ -16,7 +18,7 @@ bool g_IsPresetModifierHeld = false;
 void ExecuteHotbarAction(int slotIndex) {
     auto& slot = g_HotbarSlots[slotIndex];
     if (slot.formID == 0) return;
-    
+
     // Log ke Console Skyrim (Bisa ditekan ` di dalam game)
     RE::ConsoleLog::GetSingleton()->Print("MMO Hotbar: Menjalankan Slot %d", slotIndex + 1);
 }
@@ -36,23 +38,23 @@ public:
             auto button = event->AsButtonEvent();
             if (!button) continue;
 
-            uint32_t key = button->GetIDCode();
+            std::uint32_t key = button->GetIDCode();
             bool isPressed = button->IsPressed();
 
             // Tombol 'X' sebagai pengubah preset (ScanCode Keyboard: 45)
-            if (key == 45) { 
-                g_IsPresetModifierHeld = isPressed; 
+            if (key == 45) {
+                g_IsPresetModifierHeld = isPressed;
             }
 
             // Tombol angka 1 sampai 0, -, = (ScanCode Keyboard: 2 sampai 13)
             if (isPressed && key >= 2 && key <= 13) {
-                int targetSlot = (key - 2); // Slot 0 - 11 (Preset 1)
-                
+                int targetSlot = static_cast<int>(key - 2); // Slot 0 - 11 (Preset 1)
+
                 // Jika tombol X ditahan, geser ke Preset 2 (Slot 12 - 23)
-                if (g_IsPresetModifierHeld) { 
-                    targetSlot += 12; 
+                if (g_IsPresetModifierHeld) {
+                    targetSlot += 12;
                 }
-                
+
                 ExecuteHotbarAction(targetSlot);
             }
         }
@@ -60,8 +62,10 @@ public:
     }
 };
 
-// Inisialisasi Plugin saat Skyrim Dinyalakan
-SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* skse) {
+// Inisialisasi Plugin saat Skyrim Dinyalakan.
+// CommonLibSSE-NG mendefinisikan macro ini sebagai SKSEPluginLoad (bukan
+// SKSE_PLUGIN_LOAD). Macro tersebut menghasilkan simbol SKSEPlugin_Load.
+SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SKSE::Init(skse);
 
     auto inputDeviceMgr = RE::BSInputDeviceManager::GetSingleton();
