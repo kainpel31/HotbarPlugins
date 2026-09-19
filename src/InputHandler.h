@@ -67,7 +67,7 @@ public:
 
             const int slotIndex = manager->GetCurrentPreset() == 2 ? slot + 12 : slot;
             if (MenuOpenCloseListener::GetSingleton()->IsInventoryOpen() && _modifierHeld) {
-                manager->BindItemFromInventory(slotIndex);
+                manager->BindSelectedInventoryItem(slotIndex);
             } else if (!MenuOpenCloseListener::GetSingleton()->IsInventoryOpen()) {
                 manager->ExecuteAction(slotIndex);
             }
