@@ -4,8 +4,14 @@ project(MMOHotbar VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Menggunakan CommonLibSSE (Template standar SKSE)
-find_package(CommonLibSSE REQUIRED)
+# Menggunakan FetchContent untuk mendownload CommonLibSSE secara otomatis
+include(FetchContent)
+FetchContent_Declare(
+    CommonLibSSE
+    GIT_REPOSITORY https://github.com/unsafestring/CommonLibSSE.git
+    GIT_TAG master # atau main, sesuaikan dengan branch utama commonlibsse
+)
+FetchContent_MakeAvailable(CommonLibSSE)
 
 add_library(MMOHotbar SHARED
     src/main.cpp
