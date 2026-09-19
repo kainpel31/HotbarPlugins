@@ -2,9 +2,7 @@
 #include <SKSE/API.h>
 #include <RE/Skyrim.h>
 #include <SKSE/Logger.h>
-
 #include <spdlog/sinks/basic_file_sink.h>
-
 #include <exception>
 #include <memory>
 
@@ -22,18 +20,10 @@ void InitializeLog()
     if (!path) {
         return;
     }
-
     *path /= "MMOHotbar.log";
 
-    auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-        path->string(),
-        true
-    );
-
-    auto log = std::make_shared<spdlog::logger>(
-        "MMOHotbar",
-        std::move(sink)
-    );
+    auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
+    auto log = std::make_shared<spdlog::logger>("MMOHotbar", std::move(sink));
 
     log->set_level(spdlog::level::info);
     log->flush_on(spdlog::level::info);
@@ -50,10 +40,7 @@ void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 
     switch (message->type) {
     case SKSE::MessagingInterface::kDataLoaded:
-        SKSE::log::info(
-            "Skyrim data loaded. Initializing MMOHotbar."
-        );
-
+        SKSE::log::info("Skyrim data loaded. Initializing MMOHotbar.");
         HotbarManager::GetSingleton()->Init();
         HotbarManager::GetSingleton()->LoadConfig();
 
@@ -63,9 +50,7 @@ void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 
     case SKSE::MessagingInterface::kPostLoadGame:
     case SKSE::MessagingInterface::kNewGame:
-        SKSE::log::info(
-            "Game loaded; MMOHotbar is ready."
-        );
+        SKSE::log::info("Game loaded; MMOHotbar is ready.");
         break;
 
     default:
@@ -73,9 +58,7 @@ void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
     }
 }
 
-extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(
-    const SKSE::QueryInterface* skse,
-    SKSE::PluginInfo* info)
+extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* skse, SKSE::PluginInfo* info)
 {
     if (!skse || !info) {
         return false;
@@ -90,38 +73,23 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(
 
 extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = [] {
     SKSE::PluginVersionData version;
-
     version.PluginVersion(1);
     version.PluginName("MMOHotbar");
     version.AuthorName("kainpel31");
     version.UsesAddressLibrary(true);
     version.UsesStructsPost629(true);
-
     return version;
 }();
 
-extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(
-    const SKSE::LoadInterface* skse)
+extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* skse)
 {
     InitializeLog();
-
     SKSE::Init(skse);
-
-    SKSE::log::info(
-        "MMOHotbar plugin loading."
-    );
+    SKSE::log::info("MMOHotbar plugin loading.");
 
     auto messaging = SKSE::GetMessagingInterface();
-
-    if (!messaging ||
-        !messaging->RegisterListener(
-            "SKSE",
-            SKSEMessageHandler
-        )) {
-        SKSE::log::error(
-            "Failed to register SKSE messaging listener."
-        );
-
+    if (!messaging || !messaging->RegisterListener("SKSE", SKSEMessageHandler)) {
+        SKSE::log::error("Failed to register SKSE messaging listener.");
         return false;
     }
 
