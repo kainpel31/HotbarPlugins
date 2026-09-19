@@ -35,7 +35,6 @@ public:
     }
 
     int GetCurrentPreset() const { return _currentPreset; }
-
     void TogglePreset()
     {
         std::scoped_lock lock(_lock);
@@ -46,19 +45,14 @@ public:
     }
 
     const std::vector<HotbarSlotData>& GetSlots() const { return _slots; }
-
     int GetActiveSlotCount() const { return _activeSlotCount; }
     void SetActiveSlotCount(int count) { _activeSlotCount = std::clamp(count, 1, 12); }
-
     float GetPosX() const { return _posX; }
     void SetPosX(float value) { _posX = std::clamp(value, 0.0f, 1.0f); }
-
     float GetPosY() const { return _posY; }
     void SetPosY(float value) { _posY = std::clamp(value, 0.0f, 1.0f); }
-
     std::uint32_t GetPresetToggleKey() const { return _presetToggleKey; }
     void SetPresetToggleKey(std::uint32_t key) { _presetToggleKey = key; }
-
     std::uint32_t GetBindModifierKey() const { return _bindModifierKey; }
     void SetBindModifierKey(std::uint32_t key) { _bindModifierKey = key; }
 
@@ -69,83 +63,43 @@ public:
 
     void SetSlotKey(int slot, std::uint32_t key)
     {
-        if (slot >= 0 && slot < 12) {
-            _slotKeys[slot] = key;
-        }
+        if (slot >= 0 && slot < 12) _slotKeys[slot] = key;
     }
 
     std::string ResolveIconPath(const RE::TESForm* a_form) const
     {
-        if (!a_form) {
-            return {};
-        }
-
-        if (auto* weapon = a_form->As<RE::TESObjectWEAP>()) {
-            return weapon->GetName() ? std::string("weapon") : std::string{};
-        }
-
-        if (auto* armor = a_form->As<RE::TESObjectARMO>()) {
-            return armor->GetName() ? std::string("armor") : std::string{};
-        }
-
-        if (auto* misc = a_form->As<RE::TESObjectMISC>()) {
-            return misc->GetName() ? std::string("misc") : std::string{};
-        }
-
-        if (auto* spell = a_form->As<RE::SpellItem>()) {
-            return spell->GetName() ? std::string("spell") : std::string{};
-        }
-
-        if (auto* shout = a_form->As<RE::TESShout>()) {
-            return shout->GetName() ? std::string("shout") : std::string{};
-        }
-
+        if (!a_form) return {};
+        // The form ID is retained for the icon resolver/render cache. A custom
+        // inventory icon must be resolved from the same injector/asset mapping
+        // used by the inventory UI; it cannot be reconstructed from a label.
         return {};
     }
 
     bool BindSelectedInventoryItem(int slotIndex)
     {
         std::scoped_lock lock(_lock);
-        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) {
-            return false;
-        }
+        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) return false;
 
         auto ui = RE::UI::GetSingleton();
-        if (!ui || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
-            return false;
-        }
-
+        if (!ui || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) return false;
         auto menu = ui->GetMenu<RE::InventoryMenu>();
-        if (!menu) {
-            return false;
-        }
+        if (!menu) return false;
 
         auto* inventoryList = menu->GetRuntimeData().itemList;
-        if (!inventoryList) {
-            return false;
-        }
-
+        if (!inventoryList) return false;
         auto* selected = inventoryList->GetSelectedItem();
-        if (!selected || !selected->data.objDesc) {
-            return false;
-        }
+        if (!selected || !selected->data.objDesc) return false;
 
         auto* form = selected->data.objDesc->GetObject();
-        if (!form) {
-            return false;
-        }
-
+        if (!form) return false;
         auto* tesForm = form->As<RE::TESForm>();
-        if (!tesForm) {
-            return false;
-        }
+        if (!tesForm) return false;
 
         _slots[slotIndex].formID = tesForm->GetFormID();
         _slots[slotIndex].formType = static_cast<std::uint32_t>(tesForm->GetFormType());
         _slots[slotIndex].name = tesForm->GetName() ? tesForm->GetName() : "Unnamed";
         _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
         _slots[slotIndex].slotType = 0;
-
         SaveConfig();
         return true;
     }
@@ -161,35 +115,25 @@ public:
         json["presetToggleKey"] = _presetToggleKey;
         json["bindModifierKey"] = _bindModifierKey;
         json["slotKeys"] = _slotKeys;
-
         auto slots = nlohmann::json::array();
         for (std::size_t i = 0; i < _slots.size(); ++i) {
             slots.push_back({
-                {"index", i},
-                {"name", _slots[i].name},
-                {"formID", _slots[i].formID},
-                {"formType", _slots[i].formType},
-                {"iconPath", _slots[i].iconPath},
+                {"index", i}, {"name", _slots[i].name}, {"formID", _slots[i].formID},
+                {"formType", _slots[i].formType}, {"iconPath", _slots[i].iconPath},
                 {"slotType", _slots[i].slotType}
             });
         }
         json["slots"] = std::move(slots);
-
         std::filesystem::create_directories("Data/SKSE/Plugins");
         std::ofstream file("Data/SKSE/Plugins/MMOHotbar.json");
-        if (file) {
-            file << json.dump(4);
-        }
+        if (file) file << json.dump(4);
     }
 
     void LoadConfig()
     {
         std::scoped_lock lock(_lock);
         std::ifstream file("Data/SKSE/Plugins/MMOHotbar.json");
-        if (!file) {
-            return;
-        }
-
+        if (!file) return;
         try {
             nlohmann::json json;
             file >> json;
@@ -199,13 +143,10 @@ public:
             _posY = std::clamp(json.value("posY", 0.9f), 0.0f, 1.0f);
             _presetToggleKey = json.value("presetToggleKey", 45u);
             _bindModifierKey = json.value("bindModifierKey", 29u);
-
             if (json.contains("slotKeys") && json["slotKeys"].is_array()) {
-                for (std::size_t i = 0; i < _slotKeys.size() && i < json["slotKeys"].size(); ++i) {
+                for (std::size_t i = 0; i < _slotKeys.size() && i < json["slotKeys"].size(); ++i)
                     _slotKeys[i] = json["slotKeys"][i].get<std::uint32_t>();
-                }
             }
-
             if (json.contains("slots") && json["slots"].is_array()) {
                 for (const auto& slot : json["slots"]) {
                     const auto index = slot.value("index", -1);
@@ -227,7 +168,6 @@ public:
     {
         std::scoped_lock lock(_lock);
         if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) return;
-
         auto& slot = _slots[slotIndex];
         if (slot.formID == 0) return;
 
@@ -236,16 +176,19 @@ public:
         auto equipManager = RE::ActorEquipManager::GetSingleton();
         if (!player || !form || !equipManager) return;
 
+        // AlchemyItem covers potions, poisons, food and other consumables.
+        if (auto* consumable = form->As<RE::AlchemyItem>()) {
+            player->DrinkPotion(consumable, nullptr);
+            return;
+        }
         if (auto* spell = form->As<RE::SpellItem>()) {
             equipManager->EquipSpell(player, spell, nullptr);
             return;
         }
-
         if (auto* shout = form->As<RE::TESShout>()) {
             equipManager->EquipShout(player, shout);
             return;
         }
-
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
             equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
         }
