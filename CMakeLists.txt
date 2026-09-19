@@ -45,6 +45,8 @@ FetchContent_MakeAvailable(CommonLibSSE)
 
 add_library(MMOHotbar SHARED
     src/main.cpp
+    src/HotbarManager.h
+    src/InputHandler.h
 )
 
 target_link_libraries(MMOHotbar
