@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT\vcpkg.exe" install spdlog:x64-windows catch2:x64-windows
+          & "$env:VCPKG_ROOT\vcpkg.exe" install rapidcsv:x64-windows spdlog:x64-windows catch2:x64-windows
 
       - name: Configure CMake
         shell: pwsh
