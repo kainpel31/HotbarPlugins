@@ -36,10 +36,21 @@ jobs:
             throw "vcpkg.exe not found at $env:VCPKG_ROOT\vcpkg.exe"
           }
 
+      # 1. TAMBAHAN: Cache untuk vcpkg installed packages & folder build dependencies CMake
+      - name: Cache vcpkg and Build Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            ${{ github.workspace }}/build/_deps
+          key: ${{ runner.os }}-vcpkg-cache-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-cache-
+
       - name: Install dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT\vcpkg.exe" install rapidcsv:x64-windows spdlog:x64-windows catch2:x64-windows
+          & "$env:VCPKG_ROOT\vcpkg.exe" install rapidcsv:x64-windows spdlog:x64-windows catch2:x64-windows nlohmann-json:x64-windows xbyak:x64-windows
 
       - name: Configure CMake
         shell: pwsh
@@ -60,5 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MMO-Hotbar-Plugin
-          path: build/**/*.dll
+          path: |
+            build/**/*.dll
+            build/**/*.pdb
           if-no-files-found: error
