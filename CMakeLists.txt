@@ -30,7 +30,7 @@ endif ()
 include(FetchContent)
 
 # CommonLibSSE-NG defaults BUILD_TESTS to ON. Disable it before making the
-# dependency available; otherwise its own tests are compiled with the vcpkg
+dependency available; otherwise its own tests are compiled with the vcpkg
 # fmt version and can fail independently of this plugin.
 set(BUILD_TESTS OFF CACHE BOOL "Disable CommonLibSSE-NG tests" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "Disable project tests" FORCE)
@@ -45,9 +45,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(CommonLibSSE)
 
-# The framework repository uses master, not main. Only its ImGui headers are
-# needed at compile time; SKSEMenuFramework.dll is supplied by the installed
-# framework mod at runtime.
+# The framework repository uses master, not main. The plugin uses its ImGui
+# headers and core implementation; SKSEMenuFramework.dll is supplied by the
+# installed framework mod at runtime.
 FetchContent_Declare(
     SKSEMenuFrameworkSDK
     GIT_REPOSITORY https://github.com/QTR-Modding/SKSE-Menu-Framework-3.git
@@ -66,6 +66,18 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
 )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
+
+# imgui.h only contains declarations. Compile Dear ImGui's core translation
+# units into this DLL so calls made by UIMenu.cpp resolve at link time. The
+# menu framework DLL provides the runtime integration, while these files
+# provide the ImGui API implementation used by this plugin.
+target_sources(${PROJECT_NAME} PRIVATE
+    "${sksemenuframeworksdk_SOURCE_DIR}/imgui/imgui.cpp"
+    "${sksemenuframeworksdk_SOURCE_DIR}/imgui/imgui_draw.cpp"
+    "${sksemenuframeworksdk_SOURCE_DIR}/imgui/imgui_tables.cpp"
+    "${sksemenuframeworksdk_SOURCE_DIR}/imgui/imgui_widgets.cpp"
+)
+
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
