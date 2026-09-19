@@ -17,9 +17,6 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Setup CMake
-      uses: jwlawson/actions-setup-cmake@v3
-
     - name: Configure CMake
       run: cmake -B build -S .
 
