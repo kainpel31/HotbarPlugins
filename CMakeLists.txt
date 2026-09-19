@@ -16,6 +16,21 @@ if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
 
+# rapidcsv is required by CommonLibSSE-NG and is provided by vcpkg in CI.
+if(NOT RAPIDCSV_INCLUDE_DIRS)
+    find_path(RAPIDCSV_INCLUDE_DIRS rapidcsv.h
+        PATHS
+            "$ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}/include"
+            "$ENV{VCPKG_ROOT}/installed/x64-windows/include"
+            "${CMAKE_SOURCE_DIR}/extern/rapidcsv/include"
+        NO_DEFAULT_PATH
+    )
+endif()
+
+if(NOT RAPIDCSV_INCLUDE_DIRS)
+    message(FATAL_ERROR "rapidcsv headers were not found. Install rapidcsv via vcpkg (for example: vcpkg install rapidcsv:x64-windows) and ensure VCPKG_ROOT/VCPKG_TARGET_TRIPLET are set correctly.")
+endif()
+
 include(FetchContent)
 
 FetchContent_Declare(
