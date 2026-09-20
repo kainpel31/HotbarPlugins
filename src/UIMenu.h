@@ -23,6 +23,112 @@ namespace UIMenu {
         }
     }
 
+    namespace BottomBarHint
+    {
+        struct Target {
+            const char* menuPath;
+            const char* method;
+            const char* container;
+            const char* panel;
+            bool selectedArg;
+            bool recenter;
+        };
+
+        constexpr Target kItemMenu{
+            "_root.Menu_mc", "updateBottomBar", "navPanel", nullptr, true, false
+        };
+
+        bool AddHint(RE::GFxMovie* a_movie, RE::GFxValue& a_panel, const std::string& a_text, std::uint32_t a_scancode)
+        {
+            RE::GFxValue data;
+            RE::GFxValue controls;
+            RE::GFxValue text;
+            a_movie->CreateObject(&data);
+            a_movie->CreateObject(&controls);
+            a_movie->CreateString(&text, a_text.c_str());
+            if (!data.IsObject() || !controls.IsObject()) {
+                return false;
+            }
+            controls.SetMember("keyCode", RE::GFxValue{ static_cast<double>(a_scancode) });
+            data.SetMember("text", text);
+            data.SetMember("controls", controls);
+
+            RE::GFxValue added;
+            if (!a_panel.Invoke("addButton", &added, &data, 1)) {
+                return false;
+            }
+            return added.IsObject();
+        }
+
+        bool IsHidden(RE::GFxValue& a_obj)
+        {
+            RE::GFxValue visible;
+            return a_obj.GetMember("_visible", &visible) && visible.IsBool() && !visible.GetBool();
+        }
+
+        class UpdateHintsHook : public RE::GFxFunctionHandler
+        {
+        public:
+            UpdateHintsHook(RE::GFxValue a_old, const Target& a_target) :
+                _old(std::move(a_old)),
+                _target(a_target)
+            {}
+
+            void Call(Params& a_params) override
+            {
+                _old.Invoke("call", a_params.retVal, a_params.argsWithThisRef, a_params.argCount + 1);
+
+                if (!a_params.thisPtr || !a_params.movie) {
+                    return;
+                }
+
+                auto manager = HotbarManager::GetSingleton();
+                if (!manager) return;
+
+                RE::GFxValue container;
+                if (!a_params.thisPtr->GetMember(_target.container, &container) || !container.IsObject() || IsHidden(container)) {
+                    return;
+                }
+                RE::GFxValue panel = container;
+                if (_target.panel && (!container.GetMember(_target.panel, &panel) || !panel.IsObject())) {
+                    return;
+                }
+
+                std::uint32_t modKey = manager->GetBindModifierKey();
+                if (modKey == 0) return;
+
+                std::string hintText = "Modifier (" + GetModifierName(modKey) + ")";
+                bool added = AddHint(a_params.movie, panel, hintText, modKey);
+                if (!added) {
+                    return;
+                }
+
+                RE::GFxValue instant{ true };
+                panel.Invoke("updateButtons", nullptr, &instant, 1);
+            }
+
+        private:
+            RE::GFxValue _old;
+            const Target& _target;
+        };
+
+        inline void Install(RE::IMenu* a_menu, const Target& a_target)
+        {
+            if (!a_menu || !a_menu->uiMovie) return;
+
+            RE::GFxValue menuObj;
+            if (!a_menu->uiMovie->GetVariable(&menuObj, a_target.menuPath) || !menuObj.IsObject()) return;
+
+            RE::GFxValue oldMethod;
+            if (!menuObj.GetMember(a_target.method, &oldMethod) || !oldMethod.IsObject()) return;
+
+            auto impl = RE::make_gptr<UpdateHintsHook>(std::move(oldMethod), a_target);
+            RE::GFxValue newMethod;
+            a_menu->uiMovie->CreateFunction(&newMethod, impl.get());
+            menuObj.SetMember(a_target.method, newMethod);
+        }
+    }
+
     inline void __stdcall RenderGeneralSettings()
     {
         if (!ImGui::GetCurrentContext()) {
@@ -150,6 +256,14 @@ namespace UIMenu {
         }
     }
 
+    inline void HookMenus(RE::IMenu* a_menu)
+    {
+        if (!a_menu) return;
+        if (a_menu->MenuName() == RE::InventoryMenu::MENU_NAME || a_menu->MenuName() == RE::MagicMenu::MENU_NAME) {
+            BottomBarHint::Install(a_menu, BottomBarHint::kItemMenu);
+        }
+    }
+
     inline void Register()
     {
         SKSE::log::info("UIMenu::Register called.");
@@ -161,9 +275,8 @@ namespace UIMenu {
 
         SKSE::log::info("SKSEMenuFramework detected. Registering menu sections with proper hierarchy...");
 
-        // Jalur sub-menu menggunakan backslash ganda agar tertata rapi di bawah satu menu "MMO Hotbar"
-        SKSEMenuFramework::AddSectionItem("MMO Hotbar \\ General Settings", RenderGeneralSettings);
-        SKSEMenuFramework::AddSectionItem("MMO Hotbar \\ Slot Keybinds", RenderSlotKeybinds);
+        SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
+        SKSEMenuFramework::AddSectionItem("MMO Hotbar/Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
 
         SKSE::log::info("UIMenu registration completed successfully.");
