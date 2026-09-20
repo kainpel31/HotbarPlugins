@@ -9,11 +9,11 @@
 #include <string>
 #include "HotbarManager.h"
 #include "SKSEMenuFrameworkCompat.h"
+#include "SKSE/Logger.h"
 
 namespace UIMenu {
     inline void Save() { HotbarManager::GetSingleton()->SaveConfig(); }
 
-    // Fungsi helper untuk menerjemahkan scan code tombol modifier ke nama teks yang sesuai
     inline std::string GetModifierName(std::uint32_t keyCode) {
         switch (keyCode) {
             case 0x1D: case 0x9D: return "Ctrl";
@@ -25,10 +25,16 @@ namespace UIMenu {
 
     inline void __stdcall RenderGeneralSettings()
     {
-        // Pengaman: Pastikan konteks ImGui aktif sebelum merender menu
-        if (!ImGui::GetCurrentContext()) return;
+        if (!ImGui::GetCurrentContext()) {
+            logger::warn("RenderGeneralSettings: ImGui context is null!");
+            return;
+        }
 
         auto manager = HotbarManager::GetSingleton();
+        if (!manager) {
+            logger::error("RenderGeneralSettings: HotbarManager singleton is null!");
+            return;
+        }
         
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - General Configuration");
         ImGui::Separator();
@@ -66,7 +72,6 @@ namespace UIMenu {
             Save();
         }
 
-        // Pratinjau teks informasi tombol modifier dinamis untuk inventaris/sihir
         std::string modName = GetModifierName(manager->GetBindModifierKey());
         std::string infoText = "Inventory/Magic Footer Hint: [" + modName + "] Modifier";
         ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", infoText.c_str());
@@ -74,10 +79,16 @@ namespace UIMenu {
 
     inline void __stdcall RenderSlotKeybinds()
     {
-        // Pengaman: Pastikan konteks ImGui aktif
-        if (!ImGui::GetCurrentContext()) return;
+        if (!ImGui::GetCurrentContext()) {
+            logger::warn("RenderSlotKeybinds: ImGui context is null!");
+            return;
+        }
 
         auto manager = HotbarManager::GetSingleton();
+        if (!manager) {
+            logger::error("RenderSlotKeybinds: HotbarManager singleton is null!");
+            return;
+        }
         
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - Slot Key Bindings");
         ImGui::Separator();
@@ -96,19 +107,19 @@ namespace UIMenu {
 
     inline void __stdcall RenderHudOverlay()
     {
-        // Pengaman berlapis untuk mencegah Access Violation (CTD) pada HUD
         if (!ImGui::GetCurrentContext()) return;
         if (SKSEMenuFramework::IsAnyBlockingWindowOpened()) return;
 
         auto manager = HotbarManager::GetSingleton();
+        if (!manager) return;
+
         auto* drawList = ImGui::GetForegroundDrawList();
-        if (!drawList) return; // Mencegah null pointer dereference
+        if (!drawList) return; 
 
         const ImVec2 display = ImGui::GetIO().DisplaySize;
         const int count = manager->GetActiveSlotCount();
         const float width = count * 45.0f;
         
-        // Nilai posisi fallback jika belum diatur (di tengah agak ke bawah layar)
         float posX = manager->GetPosX();
         float posY = manager->GetPosY();
         if (posX <= 0.0f) posX = 0.5f;
@@ -131,7 +142,6 @@ namespace UIMenu {
 
             const auto color = hasItem ? IM_COL32(50, 150, 50, 180) : IM_COL32(50, 50, 50, 150);
             
-            // Merender kotak hotbar dan nomor slot agar terlihat di layar
             drawList->AddRectFilled(boxMin, boxMax, color, 4.0f);
             drawList->AddRect(boxMin, boxMax, IM_COL32(255, 255, 255, 200), 4.0f);
             
@@ -142,11 +152,20 @@ namespace UIMenu {
 
     inline void Register()
     {
-        if (!SKSEMenuFramework::IsInstalled()) return;
-        
-        // Mendaftarkan section dan HUD element dengan benar ke SKSE Menu Framework
+        logger::info("UIMenu::Register called.");
+
+        if (!SKSEMenuFramework::IsInstalled()) {
+            logger::error("SKSEMenuFramework is NOT installed or detected! Aborting menu registration.");
+            return;
+        }
+
+        logger::info("SKSEMenuFramework detected. Registering menu sections with proper hierarchy...");
+
+        // Menggunakan backslash ganda (\\) agar framework membaca ini sebagai sub-menu di bawah satu kategori utama "MMO Hotbar"
         SKSEMenuFramework::AddSectionItem("MMO Hotbar \\ General Settings", RenderGeneralSettings);
         SKSEMenuFramework::AddSectionItem("MMO Hotbar \\ Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
+
+        logger::info("UIMenu registration completed successfully.");
     }
 }
