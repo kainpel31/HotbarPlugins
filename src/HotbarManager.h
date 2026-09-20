@@ -28,6 +28,7 @@ public:
     void Init() {
         std::scoped_lock lock(_lock);
         _hotkeys.clear();
+        _lastActionTime = std::chrono::steady_clock::now();
     }
 
     const std::vector<HotbarHotkey>& GetHotkeys() const { return _hotkeys; }
@@ -205,10 +206,9 @@ public:
     void ExecuteChord(const HotbarChord& a_chord) {
         std::scoped_lock lock(_lock);
 
-        static std::chrono::steady_clock::time_point lastAction = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastAction).count() < 250) return;
-        lastAction = now;
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - _lastActionTime).count() < 250) return;
+        _lastActionTime = now;
 
         const HotbarHotkey* matched = nullptr;
         for (const auto& hb : _hotkeys) {
@@ -271,4 +271,5 @@ private:
     float _posX = 0.5f;
     float _posY = 0.9f;
     int _activeSlotCount = 12;
+    std::chrono::steady_clock::time_point _lastActionTime{ std::chrono::steady_clock::now() };
 };
