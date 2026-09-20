@@ -103,7 +103,6 @@ public:
         _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
         _slots[slotIndex].slotType = 0;
 
-        // Injeksi UI Vanilla (Bintang Favorite & Hotkey)
         auto objDesc = selected->data.objDesc;
         if (!objDesc->extraLists) {
             objDesc->extraLists = new RE::BSSimpleList<RE::ExtraDataList*>();
@@ -171,9 +170,6 @@ public:
         return false;
     }
 
-    // ==== BAGIAN MANAJEMEN DATA ====
-
-    // Hanya untuk menyimpan pengaturan General/Keys ke file JSON Global
     void SaveConfig()
     {
         std::scoped_lock lock(_lock);
@@ -210,7 +206,6 @@ public:
         } catch (...) {}
     }
 
-    // SKSE Serialization: Menyimpan item hotbar ke dalam Save File Skyrim
     void SaveSlotsToSaveGame(SKSE::SerializationInterface* a_intfc)
     {
         std::scoped_lock lock(_lock);
@@ -232,7 +227,6 @@ public:
         a_intfc->WriteRecordData(dump.data(), size);
     }
 
-    // SKSE Serialization: Memuat item hotbar dari Save File Skyrim
     void LoadSlotsFromSaveGame(SKSE::SerializationInterface* a_intfc)
     {
         std::scoped_lock lock(_lock);
@@ -251,12 +245,11 @@ public:
                     if (index >= 0 && index < static_cast<int>(_slots.size())) {
                         _slots[index].name = slot.value("name", "Kosong");
                         
-                        // Menyesuaikan FormID jika mod load order pemain berubah
                         std::uint32_t oldFormID = slot.value("formID", 0u);
                         std::uint32_t newFormID = 0;
                         if (oldFormID != 0) {
                             if (!a_intfc->ResolveFormID(oldFormID, newFormID)) {
-                                newFormID = 0; // Item mod telah dihapus dari game
+                                newFormID = 0; 
                             }
                         }
                         
@@ -281,7 +274,6 @@ public:
             slot.formType = 0;
         }
     }
-    // ================================
 
     void ExecuteAction(int slotIndex)
     {
@@ -340,7 +332,7 @@ public:
                     }
                 }
             } else {
-                return; // Item hilang dari inventory
+                return; 
             }
 
             if (!isEquipped && (player->GetEquippedObject(true) == boundObject || player->GetEquippedObject(false) == boundObject)) {
