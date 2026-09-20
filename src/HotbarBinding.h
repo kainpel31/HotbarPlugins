@@ -17,7 +17,7 @@ struct HotbarItemId {
 };
 
 struct HotbarChord {
-    RE::INPUT_DEVICE device{ RE::INPUT_DEVICE::kKeyboard }; // Ditambahkan agar cocok dengan InputHandler.h
+    RE::INPUT_DEVICE device{ RE::INPUT_DEVICE::kKeyboard };
     std::vector<std::uint32_t> keys;
 
     void Normalize() {
