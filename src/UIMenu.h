@@ -71,8 +71,6 @@ namespace UIMenu {
 
         float posX = manager->GetPosX();
         float posY = manager->GetPosY();
-        if (posX <= 0.0f) posX = 0.5f;
-        if (posY <= 0.0f) posY = 0.9f;
 
         const float startX = display.x * posX - totalWidth / 2.0f;
         const float startY = display.y * posY;
@@ -92,8 +90,7 @@ namespace UIMenu {
         if (!SKSEMenuFramework::IsInstalled()) {
             return;
         }
-        SKSEMenuFramework::SetSection("MMO Hotbar");
-        SKSEMenuFramework::AddSectionItem("General Settings", RenderGeneralSettings);
+        SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
     }
 }
