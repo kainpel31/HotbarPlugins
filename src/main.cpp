@@ -39,7 +39,6 @@ void LoadCallback(SKSE::SerializationInterface* a_intfc)
 
 void RevertCallback(SKSE::SerializationInterface* /*a_intfc*/)
 {
-    // Dipanggil saat ke Main Menu atau sebelum Load Game (Reset state)
     HotbarManager::GetSingleton()->Revert();
 }
 // ------------------------------------
@@ -96,7 +95,7 @@ void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
     case SKSE::MessagingInterface::kDataLoaded:
         SKSE::log::info("Skyrim data loaded. Initializing MMOHotbar.");
         HotbarManager::GetSingleton()->Init();
-        HotbarManager::GetSingleton()->LoadConfig(); // Hanya me-load pengaturan UI dari JSON
+        HotbarManager::GetSingleton()->LoadConfig();
 
         InputHandler::Register();
         UIMenu::Register();
@@ -149,7 +148,6 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* sks
         return false;
     }
 
-    // REGISTRASI SERIALIZATION
     auto serialization = SKSE::GetSerializationInterface();
     if (serialization) {
         serialization->SetUniqueID(kSerializationID);
