@@ -259,7 +259,7 @@ namespace UIMenu {
     inline void HookMenus(RE::IMenu* a_menu)
     {
         if (!a_menu) return;
-        if (a_menu->MenuName() == RE::InventoryMenu::MENU_NAME || a_menu->MenuName() == RE::MagicMenu::MENU_NAME) {
+        if (a_menu->menuName == RE::InventoryMenu::MENU_NAME || a_menu->menuName == RE::MagicMenu::MENU_NAME) {
             BottomBarHint::Install(a_menu, BottomBarHint::kItemMenu);
         }
     }
