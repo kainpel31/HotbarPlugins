@@ -129,7 +129,7 @@ namespace UIMenu {
         }
     }
 
-    // Menggunakan ukuran tetap (fixed height) agar panel ImGui tidak kosong/collapse
+    // Fungsi Render General Settings dengan Child Window agar memiliki tinggi tetap
     inline void __stdcall RenderGeneralSettings()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -183,6 +183,7 @@ namespace UIMenu {
         ImGui::EndChild();
     }
 
+    // Fungsi Render Slot Keybinds dengan Child Window
     inline void __stdcall RenderSlotKeybinds()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -209,7 +210,6 @@ namespace UIMenu {
         ImGui::EndChild();
     }
 
-    // HUD Overlay yang diperjelas tampilannya agar pasti terlihat di layar
     inline void __stdcall RenderHudOverlay()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -225,7 +225,7 @@ namespace UIMenu {
         if (display.x <= 0.0f || display.y <= 0.0f) return;
 
         const int count = manager->GetActiveSlotCount();
-        float slotSize = 50.0f; // Ukuran kotak tetap agar jelas terlihat
+        float slotSize = 50.0f; 
         float totalWidth = count * slotSize;
 
         float posX = manager->GetPosX();
@@ -248,7 +248,6 @@ namespace UIMenu {
                 hasItem = (slots[offset + i].formID != 0);
             }
 
-            // Warna latar belakang kotak hotbar
             const auto bgColor = hasItem ? IM_COL32(30, 120, 30, 220) : IM_COL32(40, 40, 40, 200);
             
             drawList->AddRectFilled(boxMin, boxMax, bgColor, 6.0f);
@@ -281,10 +280,12 @@ namespace UIMenu {
             return;
         }
 
-        SKSE::log::info("SKSEMenuFramework detected. Registering menu sections with proper hierarchy...");
+        SKSE::log::info("SKSEMenuFramework detected. Registering menu sections using SetSection...");
 
-        SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
-        SKSEMenuFramework::AddSectionItem("MMO Hotbar/Slot Keybinds", RenderSlotKeybinds);
+        // Menggunakan SetSection seperti pada referensi kode agar menu terdaftar dan tidak kosong
+        SKSEMenuFramework::SetSection("MMO Hotbar");
+        SKSEMenuFramework::AddSectionItem("General Settings", RenderGeneralSettings);
+        SKSEMenuFramework::AddSectionItem("Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
 
         SKSE::log::info("UIMenu registration completed successfully.");
