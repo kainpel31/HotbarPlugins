@@ -89,8 +89,11 @@ namespace UIMenu {
     }
 
     inline void Register() {
-        if (!SKSEMenuFramework::IsInstalled()) return;
-        SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
+        if (!SKSEMenuFramework::IsInstalled()) {
+            return;
+        }
+        SKSEMenuFramework::SetSection("MMO Hotbar");
+        SKSEMenuFramework::AddSectionItem("General Settings", RenderGeneralSettings);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
     }
 }
