@@ -14,16 +14,133 @@
 namespace UIMenu {
     inline void Save() { HotbarManager::GetSingleton()->SaveConfig(); }
 
-    inline void __stdcall RenderGeneralSettings() {
-        SKSEMenuFramework::SyncImGuiContext();
+    inline std::string GetModifierName(std::uint32_t keyCode) {
+        switch (keyCode) {
+            case 0x1D: case 0x9D: return "Ctrl";
+            case 0x2A: case 0x36: return "Shift";
+            case 0x38: case 0xB8: return "Alt";
+            default: return "Key " + std::to_string(keyCode);
+        }
+    }
+
+    namespace BottomBarHint
+    {
+        struct Target {
+            const char* menuPath;
+            const char* method;
+            const char* container;
+            const char* panel;
+            bool selectedArg;
+            bool recenter;
+        };
+
+        constexpr Target kItemMenu{
+            "_root.Menu_mc", "updateBottomBar", "navPanel", nullptr, true, false
+        };
+
+        bool AddHint(RE::GFxMovie* a_movie, RE::GFxValue& a_panel, const std::string& a_text, std::uint32_t a_scancode)
+        {
+            RE::GFxValue data;
+            RE::GFxValue controls;
+            RE::GFxValue text;
+            a_movie->CreateObject(&data);
+            a_movie->CreateObject(&controls);
+            a_movie->CreateString(&text, a_text.c_str());
+            if (!data.IsObject() || !controls.IsObject()) {
+                return false;
+            }
+            controls.SetMember("keyCode", RE::GFxValue{ static_cast<double>(a_scancode) });
+            data.SetMember("text", text);
+            data.SetMember("controls", controls);
+
+            RE::GFxValue added;
+            if (!a_panel.Invoke("addButton", &added, &data, 1)) {
+                return false;
+            }
+            return added.IsObject();
+        }
+
+        bool IsHidden(RE::GFxValue& a_obj)
+        {
+            RE::GFxValue visible;
+            return a_obj.GetMember("_visible", &visible) && visible.IsBool() && !visible.GetBool();
+        }
+
+        class UpdateHintsHook : public RE::GFxFunctionHandler
+        {
+        public:
+            UpdateHintsHook(RE::GFxValue a_old, const Target& a_target) :
+                _old(std::move(a_old)),
+                _target(a_target)
+            {}
+
+            void Call(Params& a_params) override
+            {
+                _old.Invoke("call", a_params.retVal, a_params.argsWithThisRef, a_params.argCount + 1);
+
+                if (!a_params.thisPtr || !a_params.movie) {
+                    return;
+                }
+
+                auto manager = HotbarManager::GetSingleton();
+                if (!manager) return;
+
+                RE::GFxValue container;
+                if (!a_params.thisPtr->GetMember(_target.container, &container) || !container.IsObject() || IsHidden(container)) {
+                    return;
+                }
+                RE::GFxValue panel = container;
+                if (_target.panel && (!container.GetMember(_target.panel, &panel) || !panel.IsObject())) {
+                    return;
+                }
+
+                std::uint32_t modKey = manager->GetBindModifierKey();
+                if (modKey == 0) return;
+
+                std::string hintText = "Modifier (" + GetModifierName(modKey) + ")";
+                bool added = AddHint(a_params.movie, panel, hintText, modKey);
+                if (!added) {
+                    return;
+                }
+
+                RE::GFxValue instant{ true };
+                panel.Invoke("updateButtons", nullptr, &instant, 1);
+            }
+
+        private:
+            RE::GFxValue _old;
+            const Target& _target;
+        };
+
+        inline void Install(RE::IMenu* a_menu, const Target& a_target)
+        {
+            if (!a_menu || !a_menu->uiMovie) return;
+
+            RE::GFxValue menuObj;
+            if (!a_menu->uiMovie->GetVariable(&menuObj, a_target.menuPath) || !menuObj.IsObject()) return;
+
+            RE::GFxValue oldMethod;
+            if (!menuObj.GetMember(a_target.method, &oldMethod) || !oldMethod.IsObject()) return;
+
+            auto impl = RE::make_gptr<UpdateHintsHook>(std::move(oldMethod), a_target);
+            RE::GFxValue newMethod;
+            a_menu->uiMovie->CreateFunction(&newMethod, impl.get());
+            menuObj.SetMember(a_target.method, newMethod);
+        }
+    }
+
+    inline void __stdcall RenderGeneralSettings()
+    {
         if (!ImGui::GetCurrentContext()) return;
-        
-        ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - General Configuration");
-        ImGui::Separator();
-        ImGui::Spacing();
 
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
+        
+        ImGui::BeginChild("MMOHotbar_General_Child", ImVec2(0, 450), true);
+
+        ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - General Configuration");
+        ImGui::Separator();
+        ImGui::Spacing();
 
         int active = manager->GetActiveSlotCount();
         if (ImGui::SliderInt("Active hotbar slots", &active, 1, 12)) {
@@ -42,24 +159,64 @@ namespace UIMenu {
             manager->SetPosY(y);
             Save();
         }
+
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Key values use Skyrim keyboard scan codes.");
+        
+        int toggle = static_cast<int>(manager->GetPresetToggleKey());
+        if (ImGui::InputInt("Preset toggle key", &toggle)) {
+            manager->SetPresetToggleKey(static_cast<std::uint32_t>(std::max(toggle, 0)));
+            Save();
+        }
+
+        int modifier = static_cast<int>(manager->GetBindModifierKey());
+        if (ImGui::InputInt("Bind Modifier Key (Scan Code)", &modifier)) {
+            manager->SetBindModifierKey(static_cast<std::uint32_t>(std::max(modifier, 0)));
+            Save();
+        }
+
+        std::string modName = GetModifierName(manager->GetBindModifierKey());
+        std::string infoText = "Inventory/Magic Footer Hint: [" + modName + "] Modifier";
+        ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", infoText.c_str());
+
+        ImGui::EndChild();
     }
 
-    inline void __stdcall RenderHudOverlay() {
-        SKSEMenuFramework::SyncImGuiContext();
+    inline void __stdcall RenderSlotKeybinds()
+    {
+        if (!ImGui::GetCurrentContext()) return;
+
+        auto manager = HotbarManager::GetSingleton();
+        if (!manager) return;
+        
+        ImGui::BeginChild("MMOHotbar_Slots_Child", ImVec2(0, 450), true);
+
+        ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - Slot Key Bindings");
+        ImGui::Separator();
+        ImGui::TextUnformatted("The same slot keys are used by Preset 1 and Preset 2.");
+        ImGui::Spacing();
+
+        for (int i = 0; i < 12; ++i) {
+            int key = static_cast<int>(manager->GetSlotKey(i));
+            std::string label = "Slot " + std::to_string(i + 1);
+            if (ImGui::InputInt(label.c_str(), &key)) {
+                manager->SetSlotKey(i, static_cast<std::uint32_t>(std::max(key, 0)));
+                Save();
+            }
+        }
+
+        ImGui::EndChild();
+    }
+
+    inline void __stdcall RenderHudOverlay()
+    {
         if (!ImGui::GetCurrentContext()) return;
         if (SKSEMenuFramework::IsAnyBlockingWindowOpened()) return;
-
-        auto ui = RE::UI::GetSingleton();
-        if (!ui || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || 
-            ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || 
-            ui->IsMenuOpen(RE::Console::MENU_NAME)) {
-            return;
-        }
 
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
 
-        auto* drawList = ImGui::GetBackgroundDrawList(); 
+        auto* drawList = ImGui::GetForegroundDrawList();
         if (!drawList) return; 
 
         const ImVec2 display = ImGui::GetIO().DisplaySize;
@@ -71,30 +228,63 @@ namespace UIMenu {
 
         float posX = manager->GetPosX();
         float posY = manager->GetPosY();
+        if (posX <= 0.0f) posX = 0.5f;
+        if (posY <= 0.0f) posY = 0.9f;
 
         const float startX = display.x * posX - totalWidth / 2.0f;
         const float startY = display.y * posY;
+
+        const auto& slots = manager->GetSlots();
+        const int offset = manager->GetCurrentPreset() == 2 ? 12 : 0;
 
         for (int i = 0; i < count; ++i) {
             const ImVec2 boxMin(startX + (i * slotSize), startY);
             const ImVec2 boxMax(boxMin.x + 45.0f, boxMin.y + 45.0f);
             
-            drawList->AddRectFilled(boxMin, boxMax, IM_COL32(40, 40, 40, 200), 6.0f);
+            bool hasItem = false;
+            if (slots.size() > static_cast<size_t>(offset + i)) {
+                hasItem = (slots[offset + i].formID != 0);
+            }
+
+            const auto bgColor = hasItem ? IM_COL32(30, 120, 30, 220) : IM_COL32(40, 40, 40, 200);
+            
+            drawList->AddRectFilled(boxMin, boxMax, bgColor, 6.0f);
             drawList->AddRect(boxMin, boxMax, IM_COL32(255, 255, 255, 255), 6.0f, 0, 2.0f);
+            
             std::string text = std::to_string(i + 1);
             drawList->AddText(ImVec2(boxMin.x + 16.0f, boxMin.y + 14.0f), IM_COL32(255, 255, 255, 255), text.c_str());
         }
     }
 
-    inline void HookMenus(RE::IMenu* /*a_menu*/) {
-        // Fungsi hook menu stub agar kompatibel dengan pemanggilan di main.cpp
+    inline void HookMenus(RE::IMenu* a_menu)
+    {
+        if (!a_menu) return;
+        auto ui = RE::UI::GetSingleton();
+        if (!ui) return;
+
+        if (ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME) && a_menu == ui->GetMenu(RE::InventoryMenu::MENU_NAME).get()) {
+            BottomBarHint::Install(a_menu, BottomBarHint::kItemMenu);
+        } else if (ui->IsMenuOpen(RE::MagicMenu::MENU_NAME) && a_menu == ui->GetMenu(RE::MagicMenu::MENU_NAME).get()) {
+            BottomBarHint::Install(a_menu, BottomBarHint::kItemMenu);
+        }
     }
 
-    inline void Register() {
+    inline void Register()
+    {
+        SKSE::log::info("UIMenu::Register called.");
+
         if (!SKSEMenuFramework::IsInstalled()) {
+            SKSE::log::error("SKSEMenuFramework is NOT installed or detected! Aborting menu registration.");
             return;
         }
+
+        SKSE::log::info("SKSEMenuFramework detected. Registering menu sections...");
+
+        // Menyesuaikan dengan standar fungsi kompatibilitas SKSEMenuFramework
         SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
+        SKSEMenuFramework::AddSectionItem("MMO Hotbar/Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
+
+        SKSE::log::info("UIMenu registration completed successfully.");
     }
 }

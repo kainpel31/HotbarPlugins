@@ -14,35 +14,6 @@
 #define DLLEXPORT __declspec(dllexport)
 #endif
 
-// --- SKSE SERIALIZATION CALLBACKS ---
-constexpr std::uint32_t kSerializationID = 'MMOH';
-
-void SaveCallback(SKSE::SerializationInterface* a_intfc)
-{
-    if (a_intfc->OpenRecord(kSerializationID, 1)) {
-        HotbarManager::GetSingleton()->SaveSlotsToSaveGame(a_intfc);
-    }
-}
-
-void LoadCallback(SKSE::SerializationInterface* a_intfc)
-{
-    std::uint32_t type;
-    std::uint32_t version;
-    std::uint32_t length;
-    while (a_intfc->GetNextRecordInfo(type, version, length)) {
-        if (type == kSerializationID) {
-            HotbarManager::GetSingleton()->LoadSlotsFromSaveGame(a_intfc);
-            break;
-        }
-    }
-}
-
-void RevertCallback(SKSE::SerializationInterface* a_intfc)
-{
-    HotbarManager::GetSingleton()->Revert(a_intfc);
-}
-// ------------------------------------
-
 class MenuHookListener : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 {
 public:
@@ -120,9 +91,11 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* s
     if (!skse || !info) {
         return false;
     }
+
     info->infoVersion = SKSE::PluginInfo::kVersion;
     info->name = "MMOHotbar";
     info->version = 1;
+
     return !skse->IsEditor();
 }
 
@@ -146,17 +119,6 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* sks
     if (!messaging || !messaging->RegisterListener("SKSE", SKSEMessageHandler)) {
         SKSE::log::error("Failed to register SKSE messaging listener.");
         return false;
-    }
-
-    auto serialization = SKSE::GetSerializationInterface();
-    if (serialization) {
-        serialization->SetUniqueID(kSerializationID);
-        serialization->SetSaveCallback(SaveCallback);
-        serialization->SetLoadCallback(LoadCallback);
-        serialization->SetRevertCallback(RevertCallback);
-        SKSE::log::info("Serialization callbacks registered.");
-    } else {
-        SKSE::log::error("Failed to get SKSE serialization interface.");
     }
 
     return true;
