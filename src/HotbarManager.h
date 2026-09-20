@@ -2,6 +2,8 @@
 
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
+#include <RE/E/ExtraFavorited.h>
+#include <RE/E/ExtraHotkey.h>
 #include <SKSE/Logger.h>
 #include <array>
 #include <algorithm>
@@ -32,7 +34,6 @@ public:
     {
         std::scoped_lock lock(_lock);
         _slots.resize(24);
-        SKSE::log::info("MMOHotbar initialized with 24 slots.");
     }
 
     int GetCurrentPreset() const { return _currentPreset; }
@@ -101,17 +102,31 @@ public:
         _slots[slotIndex].name = tesForm->GetName() ? tesForm->GetName() : "Unnamed";
         _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
         _slots[slotIndex].slotType = 0;
-        SaveConfig();
 
-        if (menu->uiMovie) {
-            RE::GFxValue selectedEntry;
-            if (menu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
-                if (selectedEntry.IsObject()) {
-                    std::string mappedName = _slots[slotIndex].name + " [Slot " + std::to_string(slotIndex + 1) + "]";
-                    selectedEntry.SetMember("text", RE::GFxValue(mappedName.c_str()));
-                    menu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
+        // Injeksi UI Vanilla (Bintang Favorite & Hotkey)
+        auto objDesc = selected->data.objDesc;
+        if (!objDesc->extraLists) {
+            objDesc->extraLists = new RE::BSSimpleList<RE::ExtraDataList*>();
+            objDesc->extraLists->push_front(new RE::ExtraDataList());
+        }
+        
+        if (objDesc->extraLists && !objDesc->extraLists->empty()) {
+            auto xList = objDesc->extraLists->front();
+            if (xList) {
+                if (!xList->HasType(RE::ExtraDataType::kFavorited)) {
+                    xList->Add(new RE::ExtraFavorited());
+                }
+                auto xHotkey = xList->GetByType<RE::ExtraHotkey>();
+                if (xHotkey) {
+                    xHotkey->hotkey = static_cast<RE::ExtraHotkey::Hotkey>(slotIndex);
+                } else {
+                    xList->Add(new RE::ExtraHotkey(static_cast<RE::ExtraHotkey::Hotkey>(slotIndex)));
                 }
             }
+        }
+
+        if (menu->uiMovie) {
+            menu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
         }
         return true;
     }
@@ -137,12 +152,16 @@ public:
                     _slots[slotIndex].name = tesForm->GetName() ? tesForm->GetName() : "Unnamed Spell";
                     _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
                     _slots[slotIndex].slotType = 0;
-                    SaveConfig();
+                    
+                    auto magicFavs = RE::MagicFavorites::GetSingleton();
+                    if (magicFavs) {
+                        magicFavs->SetFavorite(tesForm);
+                    }
                     
                     RE::GFxValue selectedEntry;
                     if (magicMenu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
-                        std::string mappedName = _slots[slotIndex].name + " [Slot " + std::to_string(slotIndex + 1) + "]";
-                        selectedEntry.SetMember("text", RE::GFxValue(mappedName.c_str()));
+                        selectedEntry.SetMember("isFavorited", RE::GFxValue(true));
+                        selectedEntry.SetMember("hotkey", RE::GFxValue(slotIndex));
                         magicMenu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
                     }
                     return true;
@@ -152,11 +171,13 @@ public:
         return false;
     }
 
+    // ==== BAGIAN MANAJEMEN DATA ====
+
+    // Hanya untuk menyimpan pengaturan General/Keys ke file JSON Global
     void SaveConfig()
     {
         std::scoped_lock lock(_lock);
         nlohmann::json json;
-        json["currentPreset"] = _currentPreset;
         json["activeSlotCount"] = _activeSlotCount;
         json["posX"] = _posX;
         json["posY"] = _posY;
@@ -164,15 +185,6 @@ public:
         json["bindModifierKey"] = _bindModifierKey;
         json["slotKeys"] = _slotKeys;
         
-        auto slots = nlohmann::json::array();
-        for (std::size_t i = 0; i < _slots.size(); ++i) {
-            slots.push_back({
-                {"index", i}, {"name", _slots[i].name}, {"formID", _slots[i].formID},
-                {"formType", _slots[i].formType}, {"iconPath", _slots[i].iconPath},
-                {"slotType", _slots[i].slotType}
-            });
-        }
-        json["slots"] = std::move(slots);
         std::filesystem::create_directories("Data/SKSE/Plugins");
         std::ofstream file("Data/SKSE/Plugins/MMOHotbar.json");
         if (file) file << json.dump(4);
@@ -186,7 +198,6 @@ public:
         try {
             nlohmann::json json;
             file >> json;
-            _currentPreset = json.value("currentPreset", 1);
             _activeSlotCount = std::clamp(json.value("activeSlotCount", 12), 1, 12);
             _posX = std::clamp(json.value("posX", 0.5f), 0.0f, 1.0f);
             _posY = std::clamp(json.value("posY", 0.9f), 0.0f, 1.0f);
@@ -196,12 +207,60 @@ public:
                 for (std::size_t i = 0; i < _slotKeys.size() && i < json["slotKeys"].size(); ++i)
                     _slotKeys[i] = json["slotKeys"][i].get<std::uint32_t>();
             }
-            if (json.contains("slots") && json["slots"].is_array()) {
-                for (const auto& slot : json["slots"]) {
+        } catch (...) {}
+    }
+
+    // SKSE Serialization: Menyimpan item hotbar ke dalam Save File Skyrim
+    void SaveSlotsToSaveGame(SKSE::SerializationInterface* a_intfc)
+    {
+        std::scoped_lock lock(_lock);
+        nlohmann::json j;
+        j["currentPreset"] = _currentPreset;
+        auto slots = nlohmann::json::array();
+        for (std::size_t i = 0; i < _slots.size(); ++i) {
+            slots.push_back({
+                {"index", i}, {"name", _slots[i].name}, {"formID", _slots[i].formID},
+                {"formType", _slots[i].formType}, {"iconPath", _slots[i].iconPath},
+                {"slotType", _slots[i].slotType}
+            });
+        }
+        j["slots"] = slots;
+        
+        std::string dump = j.dump();
+        std::uint32_t size = static_cast<std::uint32_t>(dump.size());
+        a_intfc->WriteRecordData(&size, sizeof(size));
+        a_intfc->WriteRecordData(dump.data(), size);
+    }
+
+    // SKSE Serialization: Memuat item hotbar dari Save File Skyrim
+    void LoadSlotsFromSaveGame(SKSE::SerializationInterface* a_intfc)
+    {
+        std::scoped_lock lock(_lock);
+        std::uint32_t size = 0;
+        if (a_intfc->ReadRecordData(&size, sizeof(size)) != sizeof(size)) return;
+        
+        std::string dump(size, '\0');
+        if (a_intfc->ReadRecordData(dump.data(), size) != size) return;
+        
+        try {
+            auto j = nlohmann::json::parse(dump);
+            _currentPreset = j.value("currentPreset", 1);
+            if (j.contains("slots") && j["slots"].is_array()) {
+                for (const auto& slot : j["slots"]) {
                     const auto index = slot.value("index", -1);
                     if (index >= 0 && index < static_cast<int>(_slots.size())) {
                         _slots[index].name = slot.value("name", "Kosong");
-                        _slots[index].formID = slot.value("formID", 0u);
+                        
+                        // Menyesuaikan FormID jika mod load order pemain berubah
+                        std::uint32_t oldFormID = slot.value("formID", 0u);
+                        std::uint32_t newFormID = 0;
+                        if (oldFormID != 0) {
+                            if (!a_intfc->ResolveFormID(oldFormID, newFormID)) {
+                                newFormID = 0; // Item mod telah dihapus dari game
+                            }
+                        }
+                        
+                        _slots[index].formID = newFormID;
                         _slots[index].formType = slot.value("formType", 0u);
                         _slots[index].iconPath = slot.value("iconPath", "");
                         _slots[index].slotType = slot.value("slotType", 0);
@@ -210,6 +269,19 @@ public:
             }
         } catch (...) {}
     }
+
+    void Revert()
+    {
+        std::scoped_lock lock(_lock);
+        _currentPreset = 1;
+        for (auto& slot : _slots) {
+            slot.formID = 0;
+            slot.name = "Kosong";
+            slot.iconPath = "";
+            slot.formType = 0;
+        }
+    }
+    // ================================
 
     void ExecuteAction(int slotIndex)
     {
@@ -227,6 +299,7 @@ public:
             player->DrinkPotion(consumable, nullptr);
             return;
         }
+        
         if (auto* spell = form->As<RE::SpellItem>()) {
             auto equippedLeft = player->GetEquippedObject(true);
             auto equippedRight = player->GetEquippedObject(false);
@@ -237,36 +310,47 @@ public:
             }
             return;
         }
+        
         if (auto* shout = form->As<RE::TESShout>()) {
             equipManager->EquipShout(player, shout);
             return;
         }
+        
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
             bool isEquipped = false;
+            RE::ExtraDataList* targetExtraList = nullptr;
             
-            // 1. Cek Cepat: Apakah ini senjata/perisai yang sedang dipakai di tangan?
-            if (player->GetEquippedObject(true) == boundObject || player->GetEquippedObject(false) == boundObject) {
-                isEquipped = true; 
-            } else {
-                // 2. Cek Inventaris: Scan ExtraDataList untuk memastikan apakah Armor/Pakaian ini berstatus "Dipakai"
-                auto inventory = player->GetInventory();
-                auto it = inventory.find(boundObject);
-                
-                // Iterasi aman tanpa memanggil fungsi yang hilang di CommonLibSSE-NG
-                if (it != inventory.end() && it->second.second && it->second.second->extraLists) {
-                    for (auto* extraList : *it->second.second->extraLists) {
-                        if (extraList && (extraList->HasType(RE::ExtraDataType::kWorn) || extraList->HasType(RE::ExtraDataType::kWornLeft))) {
-                            isEquipped = true;
-                            break;
+            auto inventory = player->GetInventory();
+            auto it = inventory.find(boundObject);
+            
+            if (it != inventory.end() && it->second.second) {
+                auto* entryData = it->second.second;
+                if (entryData->extraLists) {
+                    for (auto* xList : *entryData->extraLists) {
+                        if (xList) {
+                            if (xList->HasType(RE::ExtraDataType::kWorn) || xList->HasType(RE::ExtraDataType::kWornLeft)) {
+                                isEquipped = true;
+                                targetExtraList = xList; 
+                                break;
+                            }
+                            if (!targetExtraList) {
+                                targetExtraList = xList; 
+                            }
                         }
                     }
                 }
+            } else {
+                return; // Item hilang dari inventory
+            }
+
+            if (!isEquipped && (player->GetEquippedObject(true) == boundObject || player->GetEquippedObject(false) == boundObject)) {
+                isEquipped = true;
             }
 
             if (isEquipped) {
-                equipManager->UnequipObject(player, boundObject, nullptr, 1, nullptr, false);
+                equipManager->UnequipObject(player, boundObject, targetExtraList, 1, nullptr, false);
             } else {
-                equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
+                equipManager->EquipObject(player, boundObject, targetExtraList, 1, nullptr, false, false, true, false);
             }
         }
     }
