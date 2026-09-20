@@ -15,6 +15,9 @@ namespace UIMenu {
 
     inline void __stdcall RenderGeneralSettings()
     {
+        // Pengaman: Pastikan konteks ImGui aktif sebelum merender menu pengaturan
+        if (!ImGui::GetCurrentContext()) return;
+
         auto manager = HotbarManager::GetSingleton();
         int active = manager->GetActiveSlotCount();
         if (ImGui::SliderInt("Active hotbar slots", &active, 1, 12)) {
@@ -51,6 +54,9 @@ namespace UIMenu {
 
     inline void __stdcall RenderSlotKeybinds()
     {
+        // Pengaman: Pastikan konteks ImGui aktif
+        if (!ImGui::GetCurrentContext()) return;
+
         auto manager = HotbarManager::GetSingleton();
         ImGui::TextUnformatted("The same slot keys are used by Preset 1 and Preset 2.");
         for (int i = 0; i < 12; ++i) {
@@ -65,7 +71,7 @@ namespace UIMenu {
 
     inline void __stdcall RenderHudOverlay()
     {
-        // Pengaman: Pastikan konteks ImGui aktif sebelum merender HUD
+        // Pengaman berlapis untuk mencegah Access Violation (CTD) pada HUD
         if (!ImGui::GetCurrentContext()) return;
         if (SKSEMenuFramework::IsAnyBlockingWindowOpened()) return;
 
@@ -74,7 +80,7 @@ namespace UIMenu {
         if (slots.size() < 24) return;
 
         auto* drawList = ImGui::GetForegroundDrawList();
-        if (!drawList) return; // Pengaman pointer null untuk mencegah crash
+        if (!drawList) return; // Mencegah dereference pointer null (RAX 0x0)
 
         const ImVec2 display = ImGui::GetIO().DisplaySize;
         const int count = manager->GetActiveSlotCount();
