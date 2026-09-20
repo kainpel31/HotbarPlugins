@@ -231,8 +231,18 @@ public:
             return;
         }
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
-            // Logika Toggle: Jika sudah ter-equip, maka unequip. Jika belum, equip.
-            bool isEquipped = player->IsEquipped(boundObject);
+            // Pengecekan status equip menggunakan penelusuran extra data /equipped item list pada aktor
+            bool isEquipped = false;
+            player->ForEachInventoryItem([&]([[maybe_unused]] RE::TESBoundObject* a_object, RE::InventoryItemData& a_data) {
+                if (a_object == boundObject) {
+                    if (a_data.IsEquipped()) {
+                        isEquipped = true;
+                        return false; // Hentikan iterasi
+                    }
+                }
+                return true;
+            });
+
             if (isEquipped) {
                 equipManager->UnequipObject(player, boundObject);
             } else {
