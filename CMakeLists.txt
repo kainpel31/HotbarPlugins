@@ -20,7 +20,12 @@ endif()
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "")
 set(MMO_HOTBAR_VERSION "1.0.0" CACHE STRING "Project version override")
 
-project(MMOHotbar VERSION ${MMO_HOTBAR_VERSION} LANGUAGES CXX)
+# --- Identitas Mod ---
+set(AUTHOR_NAME "Ortriniaz")
+set(PRODUCT_NAME "MMOHotbar")
+set(BEAUTIFUL_NAME "MMO Hotbar")
+
+project(${PRODUCT_NAME} VERSION ${MMO_HOTBAR_VERSION} LANGUAGES CXX)
 
 if (MSVC)
     add_compile_definitions(_UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
