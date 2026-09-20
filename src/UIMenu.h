@@ -25,7 +25,6 @@ namespace UIMenu {
 
     namespace BottomBarHint
     {
-        // Tetap dipertahankan untuk keamanan hooking, walaupun text sudah diinjeksi ke item
         struct Target {
             const char* menuPath;
             const char* method;
@@ -107,19 +106,17 @@ namespace UIMenu {
         }
     }
 
-    // WAJIB: SyncImGuiContext dipanggil di dalam fungsi ini
     inline void __stdcall RenderGeneralSettings()
     {
         SKSEMenuFramework::SyncImGuiContext();
         if (!ImGui::GetCurrentContext()) return;
-
-        auto manager = HotbarManager::GetSingleton();
-        if (!manager) return;
         
-        ImGui::BeginChild("MMOHotbar_General_Child", ImVec2(0, 450), true);
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - General Configuration");
         ImGui::Separator();
         ImGui::Spacing();
+
+        auto manager = HotbarManager::GetSingleton();
+        if (!manager) return;
 
         int active = manager->GetActiveSlotCount();
         if (ImGui::SliderInt("Active hotbar slots", &active, 1, 12)) {
@@ -151,7 +148,6 @@ namespace UIMenu {
             manager->SetBindModifierKey(static_cast<std::uint32_t>(std::max(modifier, 0)));
             Save();
         }
-        ImGui::EndChild();
     }
 
     inline void __stdcall RenderSlotKeybinds()
@@ -162,7 +158,6 @@ namespace UIMenu {
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
         
-        ImGui::BeginChild("MMOHotbar_Slots_Child", ImVec2(0, 450), true);
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - Slot Key Bindings");
         ImGui::Separator();
         ImGui::Spacing();
@@ -175,7 +170,6 @@ namespace UIMenu {
                 Save();
             }
         }
-        ImGui::EndChild();
     }
 
     inline void __stdcall RenderHudOverlay()
@@ -194,7 +188,7 @@ namespace UIMenu {
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
 
-        auto* drawList = ImGui::GetForegroundDrawList();
+        auto* drawList = ImGui::GetBackgroundDrawList(); 
         if (!drawList) return; 
 
         const ImVec2 display = ImGui::GetIO().DisplaySize;
