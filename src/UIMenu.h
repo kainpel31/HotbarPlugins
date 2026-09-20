@@ -129,7 +129,6 @@ namespace UIMenu {
         }
     }
 
-    // Fungsi Render General Settings dengan Child Window agar memiliki tinggi tetap
     inline void __stdcall RenderGeneralSettings()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -183,7 +182,6 @@ namespace UIMenu {
         ImGui::EndChild();
     }
 
-    // Fungsi Render Slot Keybinds dengan Child Window
     inline void __stdcall RenderSlotKeybinds()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -282,7 +280,6 @@ namespace UIMenu {
 
         SKSE::log::info("SKSEMenuFramework detected. Registering menu sections using SetSection...");
 
-        // Menggunakan SetSection seperti pada referensi kode agar menu terdaftar dan tidak kosong
         SKSEMenuFramework::SetSection("MMO Hotbar");
         SKSEMenuFramework::AddSectionItem("General Settings", RenderGeneralSettings);
         SKSEMenuFramework::AddSectionItem("Slot Keybinds", RenderSlotKeybinds);
