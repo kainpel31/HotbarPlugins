@@ -86,6 +86,10 @@ namespace UIMenu {
         }
     }
 
+    inline void HookMenus() {
+        // Fungsi hook menu stub agar kompatibel dengan main.cpp
+    }
+
     inline void Register() {
         if (!SKSEMenuFramework::IsInstalled()) {
             return;
