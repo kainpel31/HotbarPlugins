@@ -13,6 +13,16 @@
 namespace UIMenu {
     inline void Save() { HotbarManager::GetSingleton()->SaveConfig(); }
 
+    // Fungsi helper untuk menerjemahkan scan code tombol modifier ke nama teks yang sesuai
+    inline std::string GetModifierName(std::uint32_t keyCode) {
+        switch (keyCode) {
+            case 0x1D: case 0x9D: return "Ctrl";
+            case 0x2A: case 0x36: return "Shift";
+            case 0x38: case 0xB8: return "Alt";
+            default: return "Key " + std::to_string(keyCode);
+        }
+    }
+
     inline void __stdcall RenderGeneralSettings()
     {
         // Pengaman: Pastikan konteks ImGui aktif sebelum merender menu
@@ -51,10 +61,15 @@ namespace UIMenu {
         }
 
         int modifier = static_cast<int>(manager->GetBindModifierKey());
-        if (ImGui::InputInt("Bind modifier key", &modifier)) {
+        if (ImGui::InputInt("Bind Modifier Key (Scan Code)", &modifier)) {
             manager->SetBindModifierKey(static_cast<std::uint32_t>(std::max(modifier, 0)));
             Save();
         }
+
+        // Pratinjau teks informasi tombol modifier dinamis untuk inventaris/sihir
+        std::string modName = GetModifierName(manager->GetBindModifierKey());
+        std::string infoText = "Inventory/Magic Footer Hint: [" + modName + "] Modifier";
+        ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", infoText.c_str());
     }
 
     inline void __stdcall RenderSlotKeybinds()
