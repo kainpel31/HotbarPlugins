@@ -86,8 +86,8 @@ namespace UIMenu {
         }
     }
 
-    inline void HookMenus() {
-        // Fungsi hook menu stub agar kompatibel dengan main.cpp
+    inline void HookMenus(RE::IMenu* /*a_menu*/) {
+        // Fungsi hook menu stub agar kompatibel dengan pemanggilan di main.cpp
     }
 
     inline void Register() {
