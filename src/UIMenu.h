@@ -26,13 +26,13 @@ namespace UIMenu {
     inline void __stdcall RenderGeneralSettings()
     {
         if (!ImGui::GetCurrentContext()) {
-            logger::warn("RenderGeneralSettings: ImGui context is null!");
+            SKSE::log::warn("RenderGeneralSettings: ImGui context is null!");
             return;
         }
 
         auto manager = HotbarManager::GetSingleton();
         if (!manager) {
-            logger::error("RenderGeneralSettings: HotbarManager singleton is null!");
+            SKSE::log::error("RenderGeneralSettings: HotbarManager singleton is null!");
             return;
         }
         
@@ -80,13 +80,13 @@ namespace UIMenu {
     inline void __stdcall RenderSlotKeybinds()
     {
         if (!ImGui::GetCurrentContext()) {
-            logger::warn("RenderSlotKeybinds: ImGui context is null!");
+            SKSE::log::warn("RenderSlotKeybinds: ImGui context is null!");
             return;
         }
 
         auto manager = HotbarManager::GetSingleton();
         if (!manager) {
-            logger::error("RenderSlotKeybinds: HotbarManager singleton is null!");
+            SKSE::log::error("RenderSlotKeybinds: HotbarManager singleton is null!");
             return;
         }
         
@@ -152,20 +152,20 @@ namespace UIMenu {
 
     inline void Register()
     {
-        logger::info("UIMenu::Register called.");
+        SKSE::log::info("UIMenu::Register called.");
 
         if (!SKSEMenuFramework::IsInstalled()) {
-            logger::error("SKSEMenuFramework is NOT installed or detected! Aborting menu registration.");
+            SKSE::log::error("SKSEMenuFramework is NOT installed or detected! Aborting menu registration.");
             return;
         }
 
-        logger::info("SKSEMenuFramework detected. Registering menu sections with proper hierarchy...");
+        SKSE::log::info("SKSEMenuFramework detected. Registering menu sections with proper hierarchy...");
 
-        // Menggunakan backslash ganda (\\) agar framework membaca ini sebagai sub-menu di bawah satu kategori utama "MMO Hotbar"
+        // Jalur sub-menu menggunakan backslash ganda agar tertata rapi di bawah satu menu "MMO Hotbar"
         SKSEMenuFramework::AddSectionItem("MMO Hotbar \\ General Settings", RenderGeneralSettings);
         SKSEMenuFramework::AddSectionItem("MMO Hotbar \\ Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
 
-        logger::info("UIMenu registration completed successfully.");
+        SKSE::log::info("UIMenu registration completed successfully.");
     }
 }
