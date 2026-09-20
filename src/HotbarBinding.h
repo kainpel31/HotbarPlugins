@@ -17,6 +17,7 @@ struct HotbarItemId {
 };
 
 struct HotbarChord {
+    RE::INPUT_DEVICE device{ RE::INPUT_DEVICE::kKeyboard }; // Ditambahkan agar cocok dengan InputHandler.h
     std::vector<std::uint32_t> keys;
 
     void Normalize() {
@@ -24,7 +25,7 @@ struct HotbarChord {
     }
 
     bool operator==(const HotbarChord& a_other) const {
-        return keys == a_other.keys;
+        return device == a_other.device && keys == a_other.keys;
     }
 };
 
@@ -40,7 +41,6 @@ struct HotbarHotkey {
     }
 };
 
-// Fungsi helper untuk membaca identitas item dari inventory entry data Skyrim
 inline HotbarItemId ReadIdentity(RE::InventoryEntryData* a_entryData) {
     HotbarItemId id;
     if (!a_entryData || !a_entryData->object) return id;
@@ -57,7 +57,7 @@ inline HotbarItemId ReadIdentity(RE::InventoryEntryData* a_entryData) {
             if (auto* h = extraList->GetByType<RE::ExtraHealth>()) {
                 id.health = static_cast<std::int32_t>(std::lround(h->health * 100.0f));
             }
-            break; // Ambil instance pertama yang valid
+            break;
         }
     }
     return id;
