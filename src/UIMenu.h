@@ -129,7 +129,7 @@ namespace UIMenu {
         }
     }
 
-    // --- Render General Settings dengan Child Window agar tidak kosong ---
+    // Menggunakan ukuran tetap (fixed height) agar panel ImGui tidak kosong/collapse
     inline void __stdcall RenderGeneralSettings()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -137,7 +137,7 @@ namespace UIMenu {
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
         
-        ImGui::BeginChild("MMOHotbar_General_Child", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::BeginChild("MMOHotbar_General_Child", ImVec2(0, 450), true);
 
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - General Configuration");
         ImGui::Separator();
@@ -183,7 +183,6 @@ namespace UIMenu {
         ImGui::EndChild();
     }
 
-    // --- Render Slot Keybinds dengan Child Window agar konten tampil penuh ---
     inline void __stdcall RenderSlotKeybinds()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -191,7 +190,7 @@ namespace UIMenu {
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
         
-        ImGui::BeginChild("MMOHotbar_Slots_Child", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::BeginChild("MMOHotbar_Slots_Child", ImVec2(0, 450), true);
 
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - Slot Key Bindings");
         ImGui::Separator();
@@ -210,7 +209,7 @@ namespace UIMenu {
         ImGui::EndChild();
     }
 
-    // --- HUD Overlay yang Dinamis Menyesuaikan Resolusi Layar ---
+    // HUD Overlay yang diperjelas tampilannya agar pasti terlihat di layar
     inline void __stdcall RenderHudOverlay()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -226,10 +225,7 @@ namespace UIMenu {
         if (display.x <= 0.0f || display.y <= 0.0f) return;
 
         const int count = manager->GetActiveSlotCount();
-        
-        // Skala dinamis berdasarkan lebar layar (misal: 1 slot = 2.5% dari lebar layar, atau minimal 45px)
-        float slotSize = std::max(45.0f, display.x * 0.035f);
-        float padding = slotSize * 0.15f;
+        float slotSize = 50.0f; // Ukuran kotak tetap agar jelas terlihat
         float totalWidth = count * slotSize;
 
         float posX = manager->GetPosX();
@@ -244,27 +240,22 @@ namespace UIMenu {
         const int offset = manager->GetCurrentPreset() == 2 ? 12 : 0;
 
         for (int i = 0; i < count; ++i) {
-            const ImVec2 boxMin(startX + i * slotSize, startY);
-            const ImVec2 boxMax(boxMin.x + (slotSize - padding), boxMin.y + (slotSize - padding));
+            const ImVec2 boxMin(startX + (i * slotSize), startY);
+            const ImVec2 boxMax(boxMin.x + 45.0f, boxMin.y + 45.0f);
             
             bool hasItem = false;
             if (slots.size() > static_cast<size_t>(offset + i)) {
                 hasItem = (slots[offset + i].formID != 0);
             }
 
-            const auto color = hasItem ? IM_COL32(50, 150, 50, 180) : IM_COL32(50, 50, 50, 150);
+            // Warna latar belakang kotak hotbar
+            const auto bgColor = hasItem ? IM_COL32(30, 120, 30, 220) : IM_COL32(40, 40, 40, 200);
             
-            drawList->AddRectFilled(boxMin, boxMax, color, 4.0f);
-            drawList->AddRect(boxMin, boxMax, IM_COL32(255, 255, 255, 200), 4.0f);
+            drawList->AddRectFilled(boxMin, boxMax, bgColor, 6.0f);
+            drawList->AddRect(boxMin, boxMax, IM_COL32(255, 255, 255, 255), 6.0f, 0, 2.0f);
             
-            // Ukuran teks dinamis mengikuti ukuran kotak
             std::string text = std::to_string(i + 1);
-            ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
-            ImVec2 textPos(
-                boxMin.x + ((slotSize - padding) - textSize.x) * 0.5f,
-                boxMin.y + ((slotSize - padding) - textSize.y) * 0.5f
-            );
-            drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), text.c_str());
+            drawList->AddText(ImVec2(boxMin.x + 16.0f, boxMin.y + 14.0f), IM_COL32(255, 255, 255, 255), text.c_str());
         }
     }
 
