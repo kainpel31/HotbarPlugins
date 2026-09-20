@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <memory> // Tambahan untuk memproses std::unique_ptr
 
 struct HotbarSlotData {
     std::string name = "Kosong";
@@ -101,16 +102,13 @@ public:
         _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
         _slots[slotIndex].slotType = 0;
 
-        // [VISUAL INJECTION UI] Menginstruksikan SkyUI untuk memunculkan Icon Favorite & Hotkey tanpa modifikasi C++
         if (menu->uiMovie) {
             RE::GFxValue selectedEntry;
             if (menu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
                 if (selectedEntry.IsObject()) {
-                    // Memicu bintang dan logo hotkey (keycap visual)
                     selectedEntry.SetMember("isFavorited", RE::GFxValue(true));
                     selectedEntry.SetMember("hotkey", RE::GFxValue(slotIndex));
                     
-                    // Fallback Text jika icon keycap SkyUI tidak mendukung nomor slot besar (opsional)
                     std::string mappedName = _slots[slotIndex].name + " [Slot " + std::to_string(slotIndex + 1) + "]";
                     selectedEntry.SetMember("text", RE::GFxValue(mappedName.c_str()));
                     
@@ -309,12 +307,12 @@ public:
             bool isEquipped = false;
             RE::ExtraDataList* targetExtraList = nullptr;
             
-            // Logika Equip/Unequip persis seperti Vanilla Menu! (Sangat aman dari C2039)
             auto inventory = player->GetInventory();
             auto it = inventory.find(boundObject);
             
+            // Perbaikan C3535: Ekstrak raw pointer dari std::unique_ptr menggunakan .get()
             if (it != inventory.end() && it->second.second) {
-                auto* entryData = it->second.second;
+                auto* entryData = it->second.second.get(); 
                 if (entryData->extraLists) {
                     for (auto* xList : *entryData->extraLists) {
                         if (xList) {
