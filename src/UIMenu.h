@@ -65,12 +65,17 @@ namespace UIMenu {
 
     inline void __stdcall RenderHudOverlay()
     {
+        // Pengaman: Pastikan konteks ImGui aktif sebelum merender HUD
+        if (!ImGui::GetCurrentContext()) return;
         if (SKSEMenuFramework::IsAnyBlockingWindowOpened()) return;
+
         auto manager = HotbarManager::GetSingleton();
         const auto& slots = manager->GetSlots();
         if (slots.size() < 24) return;
 
         auto* drawList = ImGui::GetForegroundDrawList();
+        if (!drawList) return; // Pengaman pointer null untuk mencegah crash
+
         const ImVec2 display = ImGui::GetIO().DisplaySize;
         const int count = manager->GetActiveSlotCount();
         const int offset = manager->GetCurrentPreset() == 2 ? 12 : 0;
