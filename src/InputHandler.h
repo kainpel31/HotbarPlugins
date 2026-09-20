@@ -3,6 +3,7 @@
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
 #include "HotbarManager.h"
+#include "InventoryIcons.h"
 
 class MenuOpenCloseListener final : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
 public:
@@ -83,10 +84,16 @@ public:
             
             // 4. Logika Pengecekan Menu & Eksekusi Binding atau Toggle Equip/Unequip
             if (_modifierHeld) {
+                bool bound = false;
                 if (menuState->IsInventoryOpen()) {
-                    manager->BindSelectedInventoryItem(slotIndex);
+                    bound = manager->BindSelectedInventoryItem(slotIndex);
                 } else if (menuState->IsMagicOpen()) {
-                    manager->BindSelectedMagicItem(slotIndex);
+                    bound = manager->BindSelectedMagicItem(slotIndex);
+                }
+                // Refresh label keycap "[N]" di menu inventory/magic segera setelah binding,
+                // tanpa ini pemain harus tutup-buka menu dulu untuk melihat perubahan.
+                if (bound) {
+                    HotbarInventoryIcons::MarkDirty();
                 }
             } else if (!menuState->IsInventoryOpen() && !menuState->IsMagicOpen()) {
                 // Memanggil aksi hotbar (otomatis equip atau unequip jika sudah dipakai)

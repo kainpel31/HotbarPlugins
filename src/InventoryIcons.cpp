@@ -2,17 +2,31 @@
 #include "HotbarManager.h"
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
+#include <string>
+
+// CATATAN PERBAIKAN:
+// Versi sebelumnya bergantung pada tipe HotbarItemId/HotbarHotkey (HotbarBinding.h)
+// dan HotbarManager::FindByItem(), yang tidak pernah ada di HotbarManager yang
+// sebenarnya (HotbarManager menyimpan slot berbasis index+formID, bukan chord
+// identity berbasis form/enchant/health). Akibatnya file ini gagal dikompilasi.
+// Di bawah ini ditulis ulang agar memakai API HotbarManager yang sesungguhnya:
+// HotbarManager::FindActiveSlotForForm() + GetSlotKey().
 
 namespace HotbarInventoryIcons {
-    void ChordScancodes(const HotbarItemId& id, std::uint32_t& key1, std::uint32_t& key2) {
-        key1 = 0;
-        key2 = 0;
-        const auto* hotkey = HotbarManager::GetSingleton()->FindByItem(id);
-        if (!hotkey) return;
+    // Mencari 1 tombol slot (scan code) yang akan langsung mengaktifkan form ini
+    // pada preset hotbar yang sedang aktif. Mengembalikan 0 bila tidak terikat.
+    std::uint32_t ScancodeForForm(std::uint32_t a_formID, int& a_outSlotNumber) {
+        a_outSlotNumber = 0;
+        if (a_formID == 0) return 0;
 
-        auto keys = hotkey->bind.keys;
-        if (!keys.empty()) key1 = keys[0];
-        if (keys.size() > 1) key2 = keys[1];
+        auto* manager = HotbarManager::GetSingleton();
+        if (!manager) return 0;
+
+        const int slot = manager->FindActiveSlotForForm(a_formID);
+        if (slot < 0) return 0;
+
+        a_outSlotNumber = slot + 1; // tampilkan sebagai 1-12, bukan 0-11
+        return manager->GetSlotKey(slot);
     }
 
     void PushKeycaps(RE::IMenu* a_menu) {
@@ -38,18 +52,13 @@ namespace HotbarInventoryIcons {
             RE::GFxValue formIdVal;
             if (!entry.GetMember("formId", &formIdVal) || !formIdVal.IsNumber()) continue;
 
-            HotbarItemId id;
-            id.form = static_cast<RE::FormID>(formIdVal.GetNumber());
+            const auto formID = static_cast<std::uint32_t>(formIdVal.GetNumber());
 
-            RE::GFxValue enchVal, healthVal;
-            if (entry.GetMember("STBench", &enchVal) && enchVal.IsNumber()) id.enchantment = static_cast<RE::FormID>(enchVal.GetNumber());
-            if (entry.GetMember("STBhealth", &healthVal) && healthVal.IsNumber()) id.health = static_cast<std::int32_t>(healthVal.GetNumber());
-
-            std::uint32_t key1 = 0, key2 = 0;
-            ChordScancodes(id, key1, key2);
+            int slotNumber = 0;
+            const std::uint32_t key1 = ScancodeForForm(formID, slotNumber);
 
             entry.SetMember("hotkeyKey1", RE::GFxValue{ static_cast<double>(key1) });
-            entry.SetMember("hotkeyKey2", RE::GFxValue{ static_cast<double>(key2) });
+            entry.SetMember("hotkeySlot", RE::GFxValue{ static_cast<double>(slotNumber) });
             changed = true;
         }
 
@@ -64,6 +73,31 @@ namespace HotbarInventoryIcons {
 
         void Call(Params& a_params) override {
             _old.Invoke("call", a_params.retVal, a_params.argsWithThisRef, a_params.argCount + 1);
+
+            // Tambahkan label keycap "[N]" ke nama item bila item ini terikat ke
+            // salah satu slot hotbar yang sedang aktif. Sebelumnya hook ini hanya
+            // meneruskan hasil formatName asli tanpa pernah menambahkan label,
+            // sehingga fitur "keycaps binding slot 1 =[1]" di README tidak pernah muncul.
+            if (!a_params.thisPtr || !a_params.movie || !a_params.retVal || !a_params.retVal->IsString()) {
+                return;
+            }
+
+            RE::GFxValue formIdVal;
+            if (!a_params.thisPtr->GetMember("formId", &formIdVal) || !formIdVal.IsNumber()) {
+                return;
+            }
+
+            const auto formID = static_cast<std::uint32_t>(formIdVal.GetNumber());
+            int slotNumber = 0;
+            ScancodeForForm(formID, slotNumber);
+            if (slotNumber <= 0) return;
+
+            std::string name = a_params.retVal->GetString();
+            name += " [" + std::to_string(slotNumber) + "]";
+
+            RE::GFxValue newName;
+            a_params.movie->CreateString(&newName, name.c_str());
+            *a_params.retVal = newName;
         }
     private:
         RE::GFxValue _old;
@@ -74,12 +108,24 @@ namespace HotbarInventoryIcons {
 
         RE::GFxValue proto;
         if (a_menu->uiMovie->GetVariable(&proto, "_global.InventoryListEntry.prototype") && proto.IsObject()) {
-            RE::GFxValue oldFormatName;
-            if (proto.GetMember("formatName", &oldFormatName) && oldFormatName.IsObject()) {
-                auto impl = RE::make_gptr<FormatNameHook>(std::move(oldFormatName));
-                RE::GFxValue newFormatName;
-                a_menu->uiMovie->CreateFunction(&newFormatName, impl.get());
-                proto.SetMember("formatName", newFormatName);
+            // PERBAIKAN: "_global.InventoryListEntry.prototype" adalah objek AS2 global yang
+            // dipakai bersama oleh semua instance list entry dan tetap ada selama sesi game
+            // berjalan. Tanpa penanda ini, setiap kali menu inventory/magic dibuka, formatName
+            // dibungkus hook baru lagi -> rantai hook memanjang tanpa batas dan setiap nama item
+            // akan diformat berkali-kali (label "[N]" bisa ditambahkan berulang).
+            RE::GFxValue alreadyHooked;
+            const bool hooked = proto.GetMember("_mmoHotbarFormatNameHooked", &alreadyHooked)
+                && alreadyHooked.IsBool() && alreadyHooked.GetBool();
+
+            if (!hooked) {
+                RE::GFxValue oldFormatName;
+                if (proto.GetMember("formatName", &oldFormatName) && oldFormatName.IsObject()) {
+                    auto impl = RE::make_gptr<FormatNameHook>(std::move(oldFormatName));
+                    RE::GFxValue newFormatName;
+                    a_menu->uiMovie->CreateFunction(&newFormatName, impl.get());
+                    proto.SetMember("formatName", newFormatName);
+                    proto.SetMember("_mmoHotbarFormatNameHooked", RE::GFxValue{ true });
+                }
             }
         }
         PushKeycaps(a_menu);
@@ -115,7 +161,11 @@ namespace HotbarInventoryIcons {
     void MarkDirty() {
         auto ui = RE::UI::GetSingleton();
         if (!ui) return;
+        // Refresh keduanya: binding bisa dilakukan dari menu inventory ataupun magic.
         if (auto menu = ui->GetMenu<RE::InventoryMenu>()) {
+            PushKeycaps(menu.get());
+        }
+        if (auto menu = ui->GetMenu<RE::MagicMenu>()) {
             PushKeycaps(menu.get());
         }
     }

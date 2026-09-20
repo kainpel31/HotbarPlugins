@@ -62,6 +62,24 @@ public:
         return slot >= 0 && slot < 12 ? _slotKeys[slot] : 0;
     }
 
+    // Mencari slot lokal (0-11) pada preset yang sedang aktif yang terisi oleh form tertentu.
+    // Dipakai oleh HotbarInventoryIcons untuk menampilkan keycap "[N]" pada menu inventory/magic.
+    // Mengembalikan -1 apabila form tidak terikat ke slot manapun pada preset aktif.
+    int FindActiveSlotForForm(std::uint32_t a_formID) const
+    {
+        std::scoped_lock lock(_lock);
+        if (a_formID == 0) return -1;
+
+        const int offset = _currentPreset == 2 ? 12 : 0;
+        for (int i = 0; i < _activeSlotCount && i < 12; ++i) {
+            const std::size_t index = static_cast<std::size_t>(offset + i);
+            if (index < _slots.size() && _slots[index].formID == a_formID) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     void SetSlotKey(int slot, std::uint32_t key)
     {
         if (slot >= 0 && slot < 12) _slotKeys[slot] = key;

@@ -119,6 +119,17 @@ namespace UIMenu {
             RE::GFxValue menuObj;
             if (!a_menu->uiMovie->GetVariable(&menuObj, a_target.menuPath) || !menuObj.IsObject()) return;
 
+            // PERBAIKAN: tanpa penanda ini, setiap kali menu dibuka ulang Install() akan
+            // membungkus 'method' yang sudah pernah di-hook dengan hook baru lagi.
+            // Rantai hook lama tidak pernah dilepas (clip Flash menu biasanya tetap hidup
+            // di antara buka-tutup), sehingga AddHint() terpanggil berkali-kali tiap update
+            // dan hint "Modifier" muncul berduplikasi serta rantai pemanggilan makin panjang.
+            std::string hookedFlag = std::string("_mmoHotbarHooked_") + a_target.method;
+            RE::GFxValue alreadyHooked;
+            if (menuObj.GetMember(hookedFlag.c_str(), &alreadyHooked) && alreadyHooked.IsBool() && alreadyHooked.GetBool()) {
+                return;
+            }
+
             RE::GFxValue oldMethod;
             if (!menuObj.GetMember(a_target.method, &oldMethod) || !oldMethod.IsObject()) return;
 
@@ -126,6 +137,7 @@ namespace UIMenu {
             RE::GFxValue newMethod;
             a_menu->uiMovie->CreateFunction(&newMethod, impl.get());
             menuObj.SetMember(a_target.method, newMethod);
+            menuObj.SetMember(hookedFlag.c_str(), RE::GFxValue{ true });
         }
     }
 

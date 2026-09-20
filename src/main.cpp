@@ -8,6 +8,7 @@
 
 #include "HotbarManager.h"
 #include "InputHandler.h"
+#include "InventoryIcons.h"
 #include "UIMenu.h"
 
 #ifndef DLLEXPORT
@@ -70,6 +71,7 @@ void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 
         InputHandler::Register();
         UIMenu::Register();
+        HotbarInventoryIcons::Install();
 
         if (auto ui = RE::UI::GetSingleton()) {
             ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(MenuHookListener::GetSingleton());
