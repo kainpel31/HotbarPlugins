@@ -57,31 +57,20 @@ public:
     std::uint32_t GetBindModifierKey() const { return _bindModifierKey; }
     void SetBindModifierKey(std::uint32_t key) { _bindModifierKey = key; }
 
-    std::uint32_t GetSlotKey(int slot) const
-    {
-        return slot >= 0 && slot < 12 ? _slotKeys[slot] : 0;
-    }
-
-    void SetSlotKey(int slot, std::uint32_t key)
-    {
-        if (slot >= 0 && slot < 12) _slotKeys[slot] = key;
-    }
+    std::uint32_t GetSlotKey(int slot) const { return slot >= 0 && slot < 12 ? _slotKeys[slot] : 0; }
+    void SetSlotKey(int slot, std::uint32_t key) { if (slot >= 0 && slot < 12) _slotKeys[slot] = key; }
 
     std::string ResolveIconPath(const RE::TESForm* a_form) const
     {
         if (!a_form) return {};
-
         std::uint32_t formID = a_form->GetFormID();
         std::string formIDStr = fmt::format("{:08X}", formID);
-
         std::ifstream iconFile("Data/SKSE/Plugins/I4/IconMapping.json");
         if (iconFile.is_open()) {
             try {
                 nlohmann::json j;
                 iconFile >> j;
-                if (j.contains("icons") && j["icons"].contains(formIDStr)) {
-                    return j["icons"][formIDStr].get<std::string>();
-                }
+                if (j.contains("icons") && j["icons"].contains(formIDStr)) return j["icons"][formIDStr].get<std::string>();
             } catch (...) {}
         }
         return {};
@@ -113,6 +102,18 @@ public:
         _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
         _slots[slotIndex].slotType = 0;
         SaveConfig();
+
+        // Injeksi UI: Ubah nama barang di SkyUI secara visual agar terlihat ada slot ter-bind (seperti gambar 2)
+        if (menu->uiMovie) {
+            RE::GFxValue selectedEntry;
+            if (menu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
+                if (selectedEntry.IsObject()) {
+                    std::string mappedName = _slots[slotIndex].name + " [Slot " + std::to_string(slotIndex + 1) + "]";
+                    selectedEntry.SetMember("text", RE::GFxValue(mappedName.c_str()));
+                    menu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
+                }
+            }
+        }
         return true;
     }
 
@@ -138,6 +139,13 @@ public:
                     _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
                     _slots[slotIndex].slotType = 0;
                     SaveConfig();
+                    
+                    RE::GFxValue selectedEntry;
+                    if (magicMenu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
+                        std::string mappedName = _slots[slotIndex].name + " [Slot " + std::to_string(slotIndex + 1) + "]";
+                        selectedEntry.SetMember("text", RE::GFxValue(mappedName.c_str()));
+                        magicMenu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
+                    }
                     return true;
                 }
             }
@@ -201,9 +209,7 @@ public:
                     }
                 }
             }
-        } catch (const std::exception& error) {
-            SKSE::log::error("Failed to load MMOHotbar configuration: {}", error.what());
-        }
+        } catch (...) {}
     }
 
     void ExecuteAction(int slotIndex)
@@ -223,7 +229,13 @@ public:
             return;
         }
         if (auto* spell = form->As<RE::SpellItem>()) {
-            equipManager->EquipSpell(player, spell, nullptr);
+            auto equippedLeft = player->GetEquippedObject(true);
+            auto equippedRight = player->GetEquippedObject(false);
+            if (equippedLeft == spell || equippedRight == spell) {
+                equipManager->UnequipObject(player, spell, nullptr, 1, nullptr, false);
+            } else {
+                equipManager->EquipSpell(player, spell, nullptr);
+            }
             return;
         }
         if (auto* shout = form->As<RE::TESShout>()) {
@@ -232,14 +244,16 @@ public:
         }
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
             bool isEquipped = false;
-            auto equippedLeft = player->GetEquippedObject(true);
-            auto equippedRight = player->GetEquippedObject(false);
-
-            if (equippedLeft == boundObject || equippedRight == boundObject) {
+            
+            // Pengecekan Aman: Membaca status equip dari data Inventory Pemain untuk membaca Armor dan Senjata
+            auto inventory = player->GetInventory();
+            auto it = inventory.find(boundObject);
+            if (it != inventory.end() && it->second.second && it->second.second->IsEquipped()) {
                 isEquipped = true;
+            } else if (player->GetEquippedObject(true) == boundObject || player->GetEquippedObject(false) == boundObject) {
+                isEquipped = true; 
             }
 
-            // PERBAIKAN CTD: Menambahkan parameter default yang hilang pada UnequipObject
             if (isEquipped) {
                 equipManager->UnequipObject(player, boundObject, nullptr, 1, nullptr, false);
             } else {
