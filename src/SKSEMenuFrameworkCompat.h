@@ -13,7 +13,7 @@ namespace SKSEMenuFramework
         using AddSectionItemFn = void(*)(const char*, RenderFunction);
         using AddHudElementFn = std::int64_t(*)(RenderFunction);
         using IsAnyBlockingWindowOpenedFn = bool(*)();
-        using GetImGuiContextFn = ImGuiContext*(*)(); // Definisi fungsi context
+        using GetImGuiContextFn = ImGuiContext*(*)(); 
 
         struct API
         {
@@ -21,7 +21,7 @@ namespace SKSEMenuFramework
             AddSectionItemFn addSectionItem{ nullptr };
             AddHudElementFn addHudElement{ nullptr };
             IsAnyBlockingWindowOpenedFn isAnyBlockingWindowOpened{ nullptr };
-            GetImGuiContextFn getImGuiContext{ nullptr }; // Pointer fungsi context
+            GetImGuiContextFn getImGuiContext{ nullptr }; 
             bool attempted{ false };
         };
 
@@ -48,12 +48,15 @@ namespace SKSEMenuFramework
         return api.addSectionItem && api.addHudElement;
     }
 
-    // Fungsi untuk menyamakan Context ImGui antara Plugin dan SKSEMenuFramework
+    // Fungsi penting untuk menyamakan Context ImGui di lintas Thread
     inline void SyncImGuiContext()
     {
         const auto& api = detail::GetAPI();
         if (api.getImGuiContext) {
-            ImGui::SetCurrentContext(api.getImGuiContext());
+            auto* context = api.getImGuiContext();
+            if (ImGui::GetCurrentContext() != context) {
+                ImGui::SetCurrentContext(context);
+            }
         }
     }
 
