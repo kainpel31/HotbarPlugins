@@ -67,7 +67,6 @@ public:
         if (slot >= 0 && slot < 12) _slotKeys[slot] = key;
     }
 
-    // Integrasi Standar I4 / Mapping Icon Berbasis FormID
     std::string ResolveIconPath(const RE::TESForm* a_form) const
     {
         if (!a_form) return {};
@@ -75,7 +74,6 @@ public:
         std::uint32_t formID = a_form->GetFormID();
         std::string formIDStr = fmt::format("{:08X}", formID);
 
-        // Contoh pembacaan database I4 / JSON eksternal
         std::ifstream iconFile("Data/SKSE/Plugins/I4/IconMapping.json");
         if (iconFile.is_open()) {
             try {
@@ -86,7 +84,6 @@ public:
                 }
             } catch (...) {}
         }
-
         return {};
     }
 
@@ -234,7 +231,13 @@ public:
             return;
         }
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
-            equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
+            // Logika Toggle: Jika sudah ter-equip, maka unequip. Jika belum, equip.
+            bool isEquipped = player->IsEquipped(boundObject);
+            if (isEquipped) {
+                equipManager->UnequipObject(player, boundObject);
+            } else {
+                equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
+            }
         }
     }
 
