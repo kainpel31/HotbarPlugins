@@ -231,15 +231,12 @@ public:
             return;
         }
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
-            // Menggunakan fungsi bawaan CommonLibSSE-NG untuk mendeteksi item di tangan kiri/kanan
             bool isEquipped = false;
             auto equippedLeft = player->GetEquippedObject(true);
             auto equippedRight = player->GetEquippedObject(false);
 
             if (equippedLeft == boundObject || equippedRight == boundObject) {
                 isEquipped = true;
-            } else if (auto* armor = boundObject->As<RE::TESObjectARMO>()) {
-                isEquipped = player->IsWorn(armor);
             }
 
             if (isEquipped) {
