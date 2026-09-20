@@ -37,9 +37,9 @@ void LoadCallback(SKSE::SerializationInterface* a_intfc)
     }
 }
 
-void RevertCallback(SKSE::SerializationInterface* /*a_intfc*/)
+void RevertCallback(SKSE::SerializationInterface* a_intfc)
 {
-    HotbarManager::GetSingleton()->Revert();
+    HotbarManager::GetSingleton()->Revert(a_intfc);
 }
 // ------------------------------------
 
