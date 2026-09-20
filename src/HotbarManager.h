@@ -129,7 +129,7 @@ public:
             if (menu && menu->GetRuntimeData().itemList) {
                 auto* selected = menu->GetRuntimeData().itemList->GetSelectedItem();
                 if (selected && selected->data.objDesc) {
-                    entryData = selected->data.objDesc.get();
+                    entryData = selected->data.objDesc; // Diperbaiki dari .get() ke pointer langsung
                 }
             }
         }
@@ -264,6 +264,11 @@ public:
             }
         }
     }
+
+    // Fungsi stub yang diperlukan oleh main.cpp
+    void SaveSlotsToSaveGame(SKSE::SerializationInterface*) {}
+    void LoadSlotsFromSaveGame(SKSE::SerializationInterface*) {}
+    void Revert(SKSE::SerializationInterface* = nullptr) { Init(); }
 
 private:
     mutable std::recursive_mutex _lock;
