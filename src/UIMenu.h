@@ -213,6 +213,14 @@ namespace UIMenu {
         if (!ImGui::GetCurrentContext()) return;
         if (SKSEMenuFramework::IsAnyBlockingWindowOpened()) return;
 
+        // PERBAIKAN HUD: Jangan merender saat Menu tertentu terbuka (Loading, Main Menu, atau Console)
+        auto ui = RE::UI::GetSingleton();
+        if (!ui || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || 
+            ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || 
+            ui->IsMenuOpen(RE::Console::MENU_NAME)) {
+            return;
+        }
+
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
 
@@ -278,9 +286,11 @@ namespace UIMenu {
             return;
         }
 
+        // PERBAIKAN MENU & HUD KOSONG: Sinkronisasi ImGui Context dari DLL utama SMF3
+        SKSEMenuFramework::SyncImGuiContext();
+
         SKSE::log::info("SKSEMenuFramework detected. Registering menu sections...");
 
-        // Menyesuaikan dengan standar fungsi kompatibilitas SKSEMenuFramework
         SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
         SKSEMenuFramework::AddSectionItem("MMO Hotbar/Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
