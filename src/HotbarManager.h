@@ -103,7 +103,6 @@ public:
         _slots[slotIndex].slotType = 0;
         SaveConfig();
 
-        // Injeksi UI: Ubah nama barang di SkyUI secara visual agar terlihat ada slot ter-bind (seperti gambar 2)
         if (menu->uiMovie) {
             RE::GFxValue selectedEntry;
             if (menu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
@@ -245,13 +244,23 @@ public:
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
             bool isEquipped = false;
             
-            // Pengecekan Aman: Membaca status equip dari data Inventory Pemain untuk membaca Armor dan Senjata
-            auto inventory = player->GetInventory();
-            auto it = inventory.find(boundObject);
-            if (it != inventory.end() && it->second.second && it->second.second->IsEquipped()) {
-                isEquipped = true;
-            } else if (player->GetEquippedObject(true) == boundObject || player->GetEquippedObject(false) == boundObject) {
+            // 1. Cek Cepat: Apakah ini senjata/perisai yang sedang dipakai di tangan?
+            if (player->GetEquippedObject(true) == boundObject || player->GetEquippedObject(false) == boundObject) {
                 isEquipped = true; 
+            } else {
+                // 2. Cek Inventaris: Scan ExtraDataList untuk memastikan apakah Armor/Pakaian ini berstatus "Dipakai"
+                auto inventory = player->GetInventory();
+                auto it = inventory.find(boundObject);
+                
+                // Iterasi aman tanpa memanggil fungsi yang hilang di CommonLibSSE-NG
+                if (it != inventory.end() && it->second.second && it->second.second->extraLists) {
+                    for (auto* extraList : *it->second.second->extraLists) {
+                        if (extraList && (extraList->HasType(RE::ExtraDataType::kWorn) || extraList->HasType(RE::ExtraDataType::kWornLeft))) {
+                            isEquipped = true;
+                            break;
+                        }
+                    }
+                }
             }
 
             if (isEquipped) {
