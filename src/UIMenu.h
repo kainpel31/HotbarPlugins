@@ -25,6 +25,7 @@ namespace UIMenu {
 
     namespace BottomBarHint
     {
+        // Tetap dipertahankan untuk keamanan hooking, walaupun text sudah diinjeksi ke item
         struct Target {
             const char* menuPath;
             const char* method;
@@ -40,23 +41,18 @@ namespace UIMenu {
 
         bool AddHint(RE::GFxMovie* a_movie, RE::GFxValue& a_panel, const std::string& a_text, std::uint32_t a_scancode)
         {
-            RE::GFxValue data;
-            RE::GFxValue controls;
-            RE::GFxValue text;
+            RE::GFxValue data, controls, text;
             a_movie->CreateObject(&data);
             a_movie->CreateObject(&controls);
             a_movie->CreateString(&text, a_text.c_str());
-            if (!data.IsObject() || !controls.IsObject()) {
-                return false;
-            }
+            if (!data.IsObject() || !controls.IsObject()) return false;
+            
             controls.SetMember("keyCode", RE::GFxValue{ static_cast<double>(a_scancode) });
             data.SetMember("text", text);
             data.SetMember("controls", controls);
 
             RE::GFxValue added;
-            if (!a_panel.Invoke("addButton", &added, &data, 1)) {
-                return false;
-            }
+            if (!a_panel.Invoke("addButton", &added, &data, 1)) return false;
             return added.IsObject();
         }
 
@@ -69,44 +65,29 @@ namespace UIMenu {
         class UpdateHintsHook : public RE::GFxFunctionHandler
         {
         public:
-            UpdateHintsHook(RE::GFxValue a_old, const Target& a_target) :
-                _old(std::move(a_old)),
-                _target(a_target)
-            {}
-
+            UpdateHintsHook(RE::GFxValue a_old, const Target& a_target) : _old(std::move(a_old)), _target(a_target) {}
             void Call(Params& a_params) override
             {
                 _old.Invoke("call", a_params.retVal, a_params.argsWithThisRef, a_params.argCount + 1);
-
-                if (!a_params.thisPtr || !a_params.movie) {
-                    return;
-                }
+                if (!a_params.thisPtr || !a_params.movie) return;
 
                 auto manager = HotbarManager::GetSingleton();
                 if (!manager) return;
 
-                RE::GFxValue container;
-                if (!a_params.thisPtr->GetMember(_target.container, &container) || !container.IsObject() || IsHidden(container)) {
-                    return;
-                }
-                RE::GFxValue panel = container;
-                if (_target.panel && (!container.GetMember(_target.panel, &panel) || !panel.IsObject())) {
-                    return;
-                }
+                RE::GFxValue container, panel;
+                if (!a_params.thisPtr->GetMember(_target.container, &container) || !container.IsObject() || IsHidden(container)) return;
+                panel = container;
+                if (_target.panel && (!container.GetMember(_target.panel, &panel) || !panel.IsObject())) return;
 
                 std::uint32_t modKey = manager->GetBindModifierKey();
                 if (modKey == 0) return;
 
-                std::string hintText = "Modifier (" + GetModifierName(modKey) + ")";
-                bool added = AddHint(a_params.movie, panel, hintText, modKey);
-                if (!added) {
-                    return;
+                bool added = AddHint(a_params.movie, panel, "Bind MMO Hotbar (" + GetModifierName(modKey) + ")", modKey);
+                if (added) {
+                    RE::GFxValue instant{ true };
+                    panel.Invoke("updateButtons", nullptr, &instant, 1);
                 }
-
-                RE::GFxValue instant{ true };
-                panel.Invoke("updateButtons", nullptr, &instant, 1);
             }
-
         private:
             RE::GFxValue _old;
             const Target& _target;
@@ -115,11 +96,8 @@ namespace UIMenu {
         inline void Install(RE::IMenu* a_menu, const Target& a_target)
         {
             if (!a_menu || !a_menu->uiMovie) return;
-
-            RE::GFxValue menuObj;
+            RE::GFxValue menuObj, oldMethod;
             if (!a_menu->uiMovie->GetVariable(&menuObj, a_target.menuPath) || !menuObj.IsObject()) return;
-
-            RE::GFxValue oldMethod;
             if (!menuObj.GetMember(a_target.method, &oldMethod) || !oldMethod.IsObject()) return;
 
             auto impl = RE::make_gptr<UpdateHintsHook>(std::move(oldMethod), a_target);
@@ -129,15 +107,16 @@ namespace UIMenu {
         }
     }
 
+    // WAJIB: SyncImGuiContext dipanggil di dalam fungsi ini
     inline void __stdcall RenderGeneralSettings()
     {
+        SKSEMenuFramework::SyncImGuiContext();
         if (!ImGui::GetCurrentContext()) return;
 
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
         
         ImGui::BeginChild("MMOHotbar_General_Child", ImVec2(0, 450), true);
-
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - General Configuration");
         ImGui::Separator();
         ImGui::Spacing();
@@ -161,10 +140,8 @@ namespace UIMenu {
         }
 
         ImGui::Spacing();
-        ImGui::TextUnformatted("Key values use Skyrim keyboard scan codes.");
-        
         int toggle = static_cast<int>(manager->GetPresetToggleKey());
-        if (ImGui::InputInt("Preset toggle key", &toggle)) {
+        if (ImGui::InputInt("Preset toggle key (Scan Code)", &toggle)) {
             manager->SetPresetToggleKey(static_cast<std::uint32_t>(std::max(toggle, 0)));
             Save();
         }
@@ -174,26 +151,20 @@ namespace UIMenu {
             manager->SetBindModifierKey(static_cast<std::uint32_t>(std::max(modifier, 0)));
             Save();
         }
-
-        std::string modName = GetModifierName(manager->GetBindModifierKey());
-        std::string infoText = "Inventory/Magic Footer Hint: [" + modName + "] Modifier";
-        ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", infoText.c_str());
-
         ImGui::EndChild();
     }
 
     inline void __stdcall RenderSlotKeybinds()
     {
+        SKSEMenuFramework::SyncImGuiContext();
         if (!ImGui::GetCurrentContext()) return;
 
         auto manager = HotbarManager::GetSingleton();
         if (!manager) return;
         
         ImGui::BeginChild("MMOHotbar_Slots_Child", ImVec2(0, 450), true);
-
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - Slot Key Bindings");
         ImGui::Separator();
-        ImGui::TextUnformatted("The same slot keys are used by Preset 1 and Preset 2.");
         ImGui::Spacing();
 
         for (int i = 0; i < 12; ++i) {
@@ -204,16 +175,15 @@ namespace UIMenu {
                 Save();
             }
         }
-
         ImGui::EndChild();
     }
 
     inline void __stdcall RenderHudOverlay()
     {
+        SKSEMenuFramework::SyncImGuiContext();
         if (!ImGui::GetCurrentContext()) return;
         if (SKSEMenuFramework::IsAnyBlockingWindowOpened()) return;
 
-        // PERBAIKAN HUD: Jangan merender saat Menu tertentu terbuka (Loading, Main Menu, atau Console)
         auto ui = RE::UI::GetSingleton();
         if (!ui || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || 
             ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || 
@@ -241,7 +211,6 @@ namespace UIMenu {
 
         const float startX = display.x * posX - totalWidth / 2.0f;
         const float startY = display.y * posY;
-
         const auto& slots = manager->GetSlots();
         const int offset = manager->GetCurrentPreset() == 2 ? 12 : 0;
 
@@ -249,16 +218,11 @@ namespace UIMenu {
             const ImVec2 boxMin(startX + (i * slotSize), startY);
             const ImVec2 boxMax(boxMin.x + 45.0f, boxMin.y + 45.0f);
             
-            bool hasItem = false;
-            if (slots.size() > static_cast<size_t>(offset + i)) {
-                hasItem = (slots[offset + i].formID != 0);
-            }
-
+            bool hasItem = (slots.size() > static_cast<size_t>(offset + i)) && (slots[offset + i].formID != 0);
             const auto bgColor = hasItem ? IM_COL32(30, 120, 30, 220) : IM_COL32(40, 40, 40, 200);
             
             drawList->AddRectFilled(boxMin, boxMax, bgColor, 6.0f);
             drawList->AddRect(boxMin, boxMax, IM_COL32(255, 255, 255, 255), 6.0f, 0, 2.0f);
-            
             std::string text = std::to_string(i + 1);
             drawList->AddText(ImVec2(boxMin.x + 16.0f, boxMin.y + 14.0f), IM_COL32(255, 255, 255, 255), text.c_str());
         }
@@ -279,22 +243,9 @@ namespace UIMenu {
 
     inline void Register()
     {
-        SKSE::log::info("UIMenu::Register called.");
-
-        if (!SKSEMenuFramework::IsInstalled()) {
-            SKSE::log::error("SKSEMenuFramework is NOT installed or detected! Aborting menu registration.");
-            return;
-        }
-
-        // PERBAIKAN MENU & HUD KOSONG: Sinkronisasi ImGui Context dari DLL utama SMF3
-        SKSEMenuFramework::SyncImGuiContext();
-
-        SKSE::log::info("SKSEMenuFramework detected. Registering menu sections...");
-
+        if (!SKSEMenuFramework::IsInstalled()) return;
         SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
         SKSEMenuFramework::AddSectionItem("MMO Hotbar/Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
-
-        SKSE::log::info("UIMenu registration completed successfully.");
     }
 }
