@@ -239,8 +239,9 @@ public:
                 isEquipped = true;
             }
 
+            // PERBAIKAN CTD: Menambahkan parameter default yang hilang pada UnequipObject
             if (isEquipped) {
-                equipManager->UnequipObject(player, boundObject);
+                equipManager->UnequipObject(player, boundObject, nullptr, 1, nullptr, false);
             } else {
                 equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
             }
