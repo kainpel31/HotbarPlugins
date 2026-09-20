@@ -278,11 +278,11 @@ namespace UIMenu {
             return;
         }
 
-        SKSE::log::info("SKSEMenuFramework detected. Registering menu sections using SetSection...");
+        SKSE::log::info("SKSEMenuFramework detected. Registering menu sections...");
 
-        SKSEMenuFramework::SetSection("MMO Hotbar");
-        SKSEMenuFramework::AddSectionItem("General Settings", RenderGeneralSettings);
-        SKSEMenuFramework::AddSectionItem("Slot Keybinds", RenderSlotKeybinds);
+        // Menyesuaikan dengan standar fungsi kompatibilitas SKSEMenuFramework
+        SKSEMenuFramework::AddSectionItem("MMO Hotbar/General Settings", RenderGeneralSettings);
+        SKSEMenuFramework::AddSectionItem("MMO Hotbar/Slot Keybinds", RenderSlotKeybinds);
         SKSEMenuFramework::AddHudElement(RenderHudOverlay);
 
         SKSE::log::info("UIMenu registration completed successfully.");
