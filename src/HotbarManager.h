@@ -2,8 +2,6 @@
 
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
-#include <RE/E/ExtraFavorited.h>
-#include <RE/E/ExtraHotkey.h>
 #include <SKSE/Logger.h>
 #include <array>
 #include <algorithm>
@@ -103,29 +101,22 @@ public:
         _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
         _slots[slotIndex].slotType = 0;
 
-        auto objDesc = selected->data.objDesc;
-        if (!objDesc->extraLists) {
-            objDesc->extraLists = new RE::BSSimpleList<RE::ExtraDataList*>();
-            objDesc->extraLists->push_front(new RE::ExtraDataList());
-        }
-        
-        if (objDesc->extraLists && !objDesc->extraLists->empty()) {
-            auto xList = objDesc->extraLists->front();
-            if (xList) {
-                if (!xList->HasType(RE::ExtraDataType::kFavorited)) {
-                    xList->Add(new RE::ExtraFavorited());
-                }
-                auto xHotkey = xList->GetByType<RE::ExtraHotkey>();
-                if (xHotkey) {
-                    xHotkey->hotkey = static_cast<RE::ExtraHotkey::Hotkey>(slotIndex);
-                } else {
-                    xList->Add(new RE::ExtraHotkey(static_cast<RE::ExtraHotkey::Hotkey>(slotIndex)));
+        // [VISUAL INJECTION UI] Menginstruksikan SkyUI untuk memunculkan Icon Favorite & Hotkey tanpa modifikasi C++
+        if (menu->uiMovie) {
+            RE::GFxValue selectedEntry;
+            if (menu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
+                if (selectedEntry.IsObject()) {
+                    // Memicu bintang dan logo hotkey (keycap visual)
+                    selectedEntry.SetMember("isFavorited", RE::GFxValue(true));
+                    selectedEntry.SetMember("hotkey", RE::GFxValue(slotIndex));
+                    
+                    // Fallback Text jika icon keycap SkyUI tidak mendukung nomor slot besar (opsional)
+                    std::string mappedName = _slots[slotIndex].name + " [Slot " + std::to_string(slotIndex + 1) + "]";
+                    selectedEntry.SetMember("text", RE::GFxValue(mappedName.c_str()));
+                    
+                    menu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
                 }
             }
-        }
-
-        if (menu->uiMovie) {
-            menu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
         }
         return true;
     }
@@ -159,9 +150,15 @@ public:
                     
                     RE::GFxValue selectedEntry;
                     if (magicMenu->uiMovie->GetVariable(&selectedEntry, "_root.Menu_mc.inventoryLists.itemList.selectedEntry")) {
-                        selectedEntry.SetMember("isFavorited", RE::GFxValue(true));
-                        selectedEntry.SetMember("hotkey", RE::GFxValue(slotIndex));
-                        magicMenu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
+                        if (selectedEntry.IsObject()) {
+                            selectedEntry.SetMember("isFavorited", RE::GFxValue(true));
+                            selectedEntry.SetMember("hotkey", RE::GFxValue(slotIndex));
+                            
+                            std::string mappedName = _slots[slotIndex].name + " [Slot " + std::to_string(slotIndex + 1) + "]";
+                            selectedEntry.SetMember("text", RE::GFxValue(mappedName.c_str()));
+                            
+                            magicMenu->uiMovie->Invoke("_root.Menu_mc.inventoryLists.itemList.UpdateList", nullptr, nullptr, 0);
+                        }
                     }
                     return true;
                 }
@@ -312,6 +309,7 @@ public:
             bool isEquipped = false;
             RE::ExtraDataList* targetExtraList = nullptr;
             
+            // Logika Equip/Unequip persis seperti Vanilla Menu! (Sangat aman dari C2039)
             auto inventory = player->GetInventory();
             auto it = inventory.find(boundObject);
             
