@@ -14,6 +14,30 @@
 #define DLLEXPORT __declspec(dllexport)
 #endif
 
+class MenuHookListener : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+{
+public:
+    static MenuHookListener* GetSingleton()
+    {
+        static MenuHookListener instance;
+        return &instance;
+    }
+
+    RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+    {
+        if (a_event && a_event->opening) {
+            auto ui = RE::UI::GetSingleton();
+            if (ui) {
+                auto menu = ui->GetMenu(a_event->menuName);
+                if (menu) {
+                    UIMenu::HookMenus(menu.get());
+                }
+            }
+        }
+        return RE::BSEventNotifyControl::kContinue;
+    }
+};
+
 void InitializeLog()
 {
     auto path = SKSE::log::log_directory();
@@ -46,6 +70,10 @@ void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 
         InputHandler::Register();
         UIMenu::Register();
+
+        if (auto ui = RE::UI::GetSingleton()) {
+            ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(MenuHookListener::GetSingleton());
+        }
         break;
 
     case SKSE::MessagingInterface::kPostLoadGame:
