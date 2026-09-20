@@ -231,17 +231,16 @@ public:
             return;
         }
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
-            // Pengecekan status equip menggunakan penelusuran extra data /equipped item list pada aktor
+            // Menggunakan fungsi bawaan CommonLibSSE-NG untuk mendeteksi item di tangan kiri/kanan
             bool isEquipped = false;
-            player->ForEachInventoryItem([&]([[maybe_unused]] RE::TESBoundObject* a_object, RE::InventoryItemData& a_data) {
-                if (a_object == boundObject) {
-                    if (a_data.IsEquipped()) {
-                        isEquipped = true;
-                        return false; // Hentikan iterasi
-                    }
-                }
-                return true;
-            });
+            auto equippedLeft = player->GetEquippedObject(true);
+            auto equippedRight = player->GetEquippedObject(false);
+
+            if (equippedLeft == boundObject || equippedRight == boundObject) {
+                isEquipped = true;
+            } else if (auto* armor = boundObject->As<RE::TESObjectARMO>()) {
+                isEquipped = player->IsWorn(armor);
+            }
 
             if (isEquipped) {
                 equipManager->UnequipObject(player, boundObject);
