@@ -43,14 +43,18 @@ public:
     RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* events, RE::BSTEventSource<RE::InputEvent*>*) override
     {
         if (!events || !*events) return RE::BSEventNotifyControl::kContinue;
+
         auto manager = HotbarManager::GetSingleton();
         auto menuState = MenuOpenCloseListener::GetSingleton();
+        if (!manager || !menuState) return RE::BSEventNotifyControl::kContinue;
 
         for (auto* event = *events; event; event = event->next) {
             auto* button = event->AsButtonEvent();
             if (!button || button->GetDevice() != RE::INPUT_DEVICE::kKeyboard) continue;
 
             const auto key = button->GetIDCode();
+
+            // 1. Cek Tombol Modifier (misal: Ctrl)
             if (key == manager->GetBindModifierKey()) {
                 _modifierHeld = button->IsPressed() || button->IsHeld();
                 continue;
@@ -58,22 +62,26 @@ public:
 
             if (!button->IsPressed()) continue;
 
+            // 2. Cek Tombol Preset Toggle
             if (key == manager->GetPresetToggleKey()) {
                 manager->TogglePreset();
                 continue;
             }
 
+            // 3. Cek Tombol Slot (1 sampai ActiveSlotCount)
             int slot = -1;
-            for (int i = 0; i < 12; ++i) {
+            int activeCount = manager->GetActiveSlotCount();
+            for (int i = 0; i < activeCount && i < 12; ++i) {
                 if (manager->GetSlotKey(i) == key) {
                     slot = i;
                     break;
                 }
             }
-            if (slot < 0 || slot >= manager->GetActiveSlotCount()) continue;
+            if (slot < 0) continue;
 
             const int slotIndex = manager->GetCurrentPreset() == 2 ? slot + 12 : slot;
             
+            // 4. Logika Pengecekan Menu & Eksekusi Binding atau Toggle Equip/Unequip
             if (_modifierHeld) {
                 if (menuState->IsInventoryOpen()) {
                     manager->BindSelectedInventoryItem(slotIndex);
@@ -81,6 +89,7 @@ public:
                     manager->BindSelectedMagicItem(slotIndex);
                 }
             } else if (!menuState->IsInventoryOpen() && !menuState->IsMagicOpen()) {
+                // Memanggil aksi hotbar (otomatis equip atau unequip jika sudah dipakai)
                 manager->ExecuteAction(slotIndex);
             }
         }
