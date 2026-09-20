@@ -22,14 +22,12 @@ namespace SKSEMenuFramework
             AddHudElementFn addHudElement{ nullptr };
             IsAnyBlockingWindowOpenedFn isAnyBlockingWindowOpened{ nullptr };
             GetImGuiContextFn getImGuiContext{ nullptr }; 
-            bool attempted{ false };
         };
 
         inline API& GetAPI()
         {
             static API api;
-            if (!api.attempted) {
-                api.attempted = true;
+            if (!api.module) {
                 api.module = GetModuleHandleA("SKSEMenuFramework.dll");
                 if (api.module) {
                     api.addSectionItem = reinterpret_cast<AddSectionItemFn>(GetProcAddress(api.module, "AddSectionItem"));
@@ -48,7 +46,6 @@ namespace SKSEMenuFramework
         return api.addSectionItem && api.addHudElement;
     }
 
-    // Fungsi penting untuk menyamakan Context ImGui di lintas Thread
     inline void SyncImGuiContext()
     {
         const auto& api = detail::GetAPI();
