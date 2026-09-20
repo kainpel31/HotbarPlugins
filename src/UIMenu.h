@@ -129,21 +129,19 @@ namespace UIMenu {
         }
     }
 
+    // --- Render General Settings dengan Child Window agar tidak kosong ---
     inline void __stdcall RenderGeneralSettings()
     {
-        if (!ImGui::GetCurrentContext()) {
-            SKSE::log::warn("RenderGeneralSettings: ImGui context is null!");
-            return;
-        }
+        if (!ImGui::GetCurrentContext()) return;
 
         auto manager = HotbarManager::GetSingleton();
-        if (!manager) {
-            SKSE::log::error("RenderGeneralSettings: HotbarManager singleton is null!");
-            return;
-        }
+        if (!manager) return;
         
+        ImGui::BeginChild("MMOHotbar_General_Child", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysAutoResize);
+
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - General Configuration");
         ImGui::Separator();
+        ImGui::Spacing();
 
         int active = manager->GetActiveSlotCount();
         if (ImGui::SliderInt("Active hotbar slots", &active, 1, 12)) {
@@ -181,21 +179,20 @@ namespace UIMenu {
         std::string modName = GetModifierName(manager->GetBindModifierKey());
         std::string infoText = "Inventory/Magic Footer Hint: [" + modName + "] Modifier";
         ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", infoText.c_str());
+
+        ImGui::EndChild();
     }
 
+    // --- Render Slot Keybinds dengan Child Window agar konten tampil penuh ---
     inline void __stdcall RenderSlotKeybinds()
     {
-        if (!ImGui::GetCurrentContext()) {
-            SKSE::log::warn("RenderSlotKeybinds: ImGui context is null!");
-            return;
-        }
+        if (!ImGui::GetCurrentContext()) return;
 
         auto manager = HotbarManager::GetSingleton();
-        if (!manager) {
-            SKSE::log::error("RenderSlotKeybinds: HotbarManager singleton is null!");
-            return;
-        }
+        if (!manager) return;
         
+        ImGui::BeginChild("MMOHotbar_Slots_Child", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysAutoResize);
+
         ImGui::TextColored(ImVec4(0.8f, 0.7f, 0.4f, 1.0f), "MMO Hotbar - Slot Key Bindings");
         ImGui::Separator();
         ImGui::TextUnformatted("The same slot keys are used by Preset 1 and Preset 2.");
@@ -209,8 +206,11 @@ namespace UIMenu {
                 Save();
             }
         }
+
+        ImGui::EndChild();
     }
 
+    // --- HUD Overlay yang Dinamis Menyesuaikan Resolusi Layar ---
     inline void __stdcall RenderHudOverlay()
     {
         if (!ImGui::GetCurrentContext()) return;
@@ -223,23 +223,29 @@ namespace UIMenu {
         if (!drawList) return; 
 
         const ImVec2 display = ImGui::GetIO().DisplaySize;
+        if (display.x <= 0.0f || display.y <= 0.0f) return;
+
         const int count = manager->GetActiveSlotCount();
-        const float width = count * 45.0f;
         
+        // Skala dinamis berdasarkan lebar layar (misal: 1 slot = 2.5% dari lebar layar, atau minimal 45px)
+        float slotSize = std::max(45.0f, display.x * 0.035f);
+        float padding = slotSize * 0.15f;
+        float totalWidth = count * slotSize;
+
         float posX = manager->GetPosX();
         float posY = manager->GetPosY();
         if (posX <= 0.0f) posX = 0.5f;
         if (posY <= 0.0f) posY = 0.9f;
 
-        const float startX = display.x * posX - width / 2.0f;
+        const float startX = display.x * posX - totalWidth / 2.0f;
         const float startY = display.y * posY;
 
         const auto& slots = manager->GetSlots();
         const int offset = manager->GetCurrentPreset() == 2 ? 12 : 0;
 
         for (int i = 0; i < count; ++i) {
-            const ImVec2 boxMin(startX + i * 45.0f, startY);
-            const ImVec2 boxMax(boxMin.x + 40.0f, boxMin.y + 40.0f);
+            const ImVec2 boxMin(startX + i * slotSize, startY);
+            const ImVec2 boxMax(boxMin.x + (slotSize - padding), boxMin.y + (slotSize - padding));
             
             bool hasItem = false;
             if (slots.size() > static_cast<size_t>(offset + i)) {
@@ -251,8 +257,14 @@ namespace UIMenu {
             drawList->AddRectFilled(boxMin, boxMax, color, 4.0f);
             drawList->AddRect(boxMin, boxMax, IM_COL32(255, 255, 255, 200), 4.0f);
             
-            const auto text = std::to_string(i + 1);
-            drawList->AddText(ImVec2(boxMin.x + 15.0f, boxMin.y + 12.0f), IM_COL32(255, 255, 255, 255), text.c_str());
+            // Ukuran teks dinamis mengikuti ukuran kotak
+            std::string text = std::to_string(i + 1);
+            ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+            ImVec2 textPos(
+                boxMin.x + ((slotSize - padding) - textSize.x) * 0.5f,
+                boxMin.y + ((slotSize - padding) - textSize.y) * 0.5f
+            );
+            drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), text.c_str());
         }
     }
 
