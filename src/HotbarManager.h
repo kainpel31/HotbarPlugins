@@ -3,242 +3,228 @@
 #include <SKSE/SKSE.h>
 #include <RE/Skyrim.h>
 #include <SKSE/Logger.h>
+#include <array>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <chrono>
-#include "HotbarBinding.h"
+
+struct HotbarSlotData {
+    std::string name = "Kosong";
+    std::string iconPath;
+    std::uint32_t formID = 0;
+    std::uint32_t formType = 0;
+    int slotType = 0;
+};
 
 class HotbarManager {
 public:
-    enum class AssignResult {
-        kAdded,
-        kReplaced,
-        kRemoved
-    };
-
-    static HotbarManager* GetSingleton() {
+    static HotbarManager* GetSingleton()
+    {
         static HotbarManager instance;
         return &instance;
     }
 
-    void Init() {
+    void Init()
+    {
         std::scoped_lock lock(_lock);
-        _hotkeys.clear();
-        _lastActionTime = std::chrono::steady_clock::now();
+        _slots.resize(24);
+        SKSE::log::info("MMOHotbar initialized with 24 slots.");
     }
 
-    const std::vector<HotbarHotkey>& GetHotkeys() const { return _hotkeys; }
+    int GetCurrentPreset() const { return _currentPreset; }
+    void TogglePreset()
+    {
+        std::scoped_lock lock(_lock);
+        _currentPreset = _currentPreset == 1 ? 2 : 1;
+        if (auto console = RE::ConsoleLog::GetSingleton()) {
+            console->Print(">>> MMO Hotbar: Preset %d <<<", _currentPreset);
+        }
+    }
 
+    const std::vector<HotbarSlotData>& GetSlots() const { return _slots; }
+    int GetActiveSlotCount() const { return _activeSlotCount; }
+    void SetActiveSlotCount(int count) { _activeSlotCount = std::clamp(count, 1, 12); }
     float GetPosX() const { return _posX; }
     void SetPosX(float value) { _posX = std::clamp(value, 0.0f, 1.0f); }
     float GetPosY() const { return _posY; }
     void SetPosY(float value) { _posY = std::clamp(value, 0.0f, 1.0f); }
-    int GetActiveSlotCount() const { return _activeSlotCount; }
-    void SetActiveSlotCount(int count) { _activeSlotCount = std::clamp(count, 1, 12); }
+    std::uint32_t GetPresetToggleKey() const { return _presetToggleKey; }
+    void SetPresetToggleKey(std::uint32_t key) { _presetToggleKey = key; }
+    std::uint32_t GetBindModifierKey() const { return _bindModifierKey; }
+    void SetBindModifierKey(std::uint32_t key) { _bindModifierKey = key; }
 
-    bool DetachItem(std::vector<HotbarHotkey>& hotkeys, const HotbarItemId& a_id) {
-        bool detached = false;
-        for (auto it = hotkeys.begin(); it != hotkeys.end();) {
-            std::erase_if(it->items, [&](const HotbarItemId& item) {
-                if (item.Same(a_id)) {
-                    detached = true;
-                    return true;
-                }
-                return false;
-            });
-            if (it->items.empty()) {
-                it = hotkeys.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        return detached;
+    std::uint32_t GetSlotKey(int slot) const
+    {
+        return slot >= 0 && slot < 12 ? _slotKeys[slot] : 0;
     }
 
-    AssignResult Assign(const HotbarChord& a_bind, const HotbarItemId& a_id) {
-        std::scoped_lock lk(_lock);
-
-        for (auto it = _hotkeys.begin(); it != _hotkeys.end(); ++it) {
-            if (it->bind == a_bind && it->items.size() == 1 && it->items.front().Same(a_id)) {
-                _hotkeys.erase(it);
-                SaveConfig();
-                return AssignResult::kRemoved;
-            }
-        }
-
-        bool replacing = std::erase_if(_hotkeys, [&](const HotbarHotkey& h) {
-            return h.bind == a_bind;
-        }) > 0;
-
-        replacing = DetachItem(_hotkeys, a_id) || replacing;
-
-        _hotkeys.push_back(HotbarHotkey{ a_bind, { a_id } });
-        SaveConfig();
-        return replacing ? AssignResult::kReplaced : AssignResult::kAdded;
+    void SetSlotKey(int slot, std::uint32_t key)
+    {
+        if (slot >= 0 && slot < 12) _slotKeys[slot] = key;
     }
 
-    const HotbarHotkey* FindByItem(const HotbarItemId& a_id) const {
-        for (const auto& hotkey : _hotkeys) {
-            if (hotkey.Has(a_id)) return &hotkey;
+    std::string ResolveIconPath(const RE::TESForm* a_form) const
+    {
+        if (!a_form) return {};
+
+        std::uint32_t formID = a_form->GetFormID();
+        std::string formIDStr = fmt::format("{:08X}", formID);
+
+        std::ifstream iconFile("Data/SKSE/Plugins/I4/IconMapping.json");
+        if (iconFile.is_open()) {
+            try {
+                nlohmann::json j;
+                iconFile >> j;
+                if (j.contains("icons") && j["icons"].contains(formIDStr)) {
+                    return j["icons"][formIDStr].get<std::string>();
+                }
+            } catch (...) {}
         }
-        return nullptr;
+        return {};
     }
 
-    RE::ExtraDataList* FindInstanceList(RE::TESBoundObject* bound, const HotbarItemId& id) {
-        if (!bound) return nullptr;
-        auto* player = RE::PlayerCharacter::GetSingleton();
-        auto* changes = player ? player->GetInventoryChanges() : nullptr;
-        if (!changes || !changes->entryList) return nullptr;
-
-        for (auto* entry : *changes->entryList) {
-            if (!entry || entry->object != bound || !entry->extraLists) continue;
-
-            for (auto* extraList : *entry->extraLists) {
-                if (!extraList) continue;
-
-                RE::FormID enchantment = 0;
-                std::int32_t health = 0;
-
-                if (auto* ench = extraList->GetByType<RE::ExtraEnchantment>(); ench && ench->enchantment) {
-                    enchantment = ench->enchantment->GetFormID();
-                }
-                if (auto* h = extraList->GetByType<RE::ExtraHealth>()) {
-                    health = static_cast<std::int32_t>(std::lround(h->health * 100.0f));
-                }
-
-                if (enchantment == id.enchantment && health == id.health) {
-                    return extraList;
-                }
-            }
-        }
-        return nullptr;
-    }
-
-    bool BindSelectedInventoryItem(const HotbarChord& a_chord) {
+    bool BindSelectedInventoryItem(int slotIndex)
+    {
         std::scoped_lock lock(_lock);
+        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) return false;
+
         auto ui = RE::UI::GetSingleton();
-        if (!ui) return false;
+        if (!ui || !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) return false;
+        auto menu = ui->GetMenu<RE::InventoryMenu>();
+        if (!menu) return false;
 
-        RE::InventoryEntryData* entryData = nullptr;
-        if (ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
-            auto menu = ui->GetMenu<RE::InventoryMenu>();
-            if (menu && menu->GetRuntimeData().itemList) {
-                auto* selected = menu->GetRuntimeData().itemList->GetSelectedItem();
-                if (selected && selected->data.objDesc) {
-                    entryData = selected->data.objDesc; // Diperbaiki dari .get() ke pointer langsung
-                }
-            }
-        }
+        auto* inventoryList = menu->GetRuntimeData().itemList;
+        if (!inventoryList) return false;
+        auto* selected = inventoryList->GetSelectedItem();
+        // PERBAIKAN: Menggunakan pointer langsung '->' karena objDesc bertipe pointer mentah RE::InventoryEntryData*
+        if (!selected || !selected->data.objDesc) return false;
 
-        if (!entryData) return false;
-        HotbarItemId itemId = ReadIdentity(entryData);
-        if (itemId.form == 0) return false;
+        auto* form = selected->data.objDesc->GetObject();
+        if (!form) return false;
+        auto* tesForm = form->As<RE::TESForm>();
+        if (!tesForm) return false;
 
-        Assign(a_chord, itemId);
+        _slots[slotIndex].formID = tesForm->GetFormID();
+        _slots[slotIndex].formType = static_cast<std::uint32_t>(tesForm->GetFormType());
+        _slots[slotIndex].name = tesForm->GetName() ? tesForm->GetName() : "Unnamed";
+        _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
+        _slots[slotIndex].slotType = 0;
+        SaveConfig();
         return true;
     }
 
-    void SaveConfig() {
+    bool BindSelectedMagicItem(int slotIndex)
+    {
+        std::scoped_lock lock(_lock);
+        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) return false;
+
+        auto ui = RE::UI::GetSingleton();
+        if (!ui || !ui->IsMenuOpen(RE::MagicMenu::MENU_NAME)) return false;
+        auto magicMenu = ui->GetMenu<RE::MagicMenu>();
+        if (!magicMenu || !magicMenu->uiMovie) return false;
+
+        RE::GFxValue selection;
+        if (magicMenu->uiMovie->GetVariable(&selection, "_root.Menu_mc.inventoryLists.itemList.selectedEntry.formId")) {
+            if (selection.IsNumber()) {
+                std::uint32_t formID = static_cast<std::uint32_t>(selection.GetNumber());
+                auto* tesForm = RE::TESForm::LookupByID(formID);
+                if (tesForm) {
+                    _slots[slotIndex].formID = tesForm->GetFormID();
+                    _slots[slotIndex].formType = static_cast<std::uint32_t>(tesForm->GetFormType());
+                    _slots[slotIndex].name = tesForm->GetName() ? tesForm->GetName() : "Unnamed Spell";
+                    _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
+                    _slots[slotIndex].slotType = 0;
+                    SaveConfig();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    void SaveConfig()
+    {
         std::scoped_lock lock(_lock);
         nlohmann::json json;
+        json["currentPreset"] = _currentPreset;
+        json["activeSlotCount"] = _activeSlotCount;
         json["posX"] = _posX;
         json["posY"] = _posY;
-        json["activeSlotCount"] = _activeSlotCount;
-
-        auto arr = nlohmann::json::array();
-        for (const auto& hb : _hotkeys) {
-            nlohmann::json itemObj;
-            itemObj["keys"] = hb.bind.keys;
-            auto itemsArr = nlohmann::json::array();
-            for (const auto& item : hb.items) {
-                itemsArr.push_back({{"form", item.form}, {"ench", item.enchantment}, {"health", item.health}});
-            }
-            itemObj["items"] = itemsArr;
-            arr.push_back(itemObj);
+        json["presetToggleKey"] = _presetToggleKey;
+        json["bindModifierKey"] = _bindModifierKey;
+        json["slotKeys"] = _slotKeys;
+        
+        auto slots = nlohmann::json::array();
+        for (std::size_t i = 0; i < _slots.size(); ++i) {
+            slots.push_back({
+                {"index", i}, {"name", _slots[i].name}, {"formID", _slots[i].formID},
+                {"formType", _slots[i].formType}, {"iconPath", _slots[i].iconPath},
+                {"slotType", _slots[i].slotType}
+            });
         }
-        json["bindings"] = arr;
-
+        json["slots"] = std::move(slots);
         std::filesystem::create_directories("Data/SKSE/Plugins");
         std::ofstream file("Data/SKSE/Plugins/MMOHotbar.json");
         if (file) file << json.dump(4);
     }
 
-    void LoadConfig() {
+    void LoadConfig()
+    {
         std::scoped_lock lock(_lock);
         std::ifstream file("Data/SKSE/Plugins/MMOHotbar.json");
         if (!file) return;
         try {
             nlohmann::json json;
             file >> json;
+            _currentPreset = json.value("currentPreset", 1);
+            _activeSlotCount = std::clamp(json.value("activeSlotCount", 12), 1, 12);
             _posX = std::clamp(json.value("posX", 0.5f), 0.0f, 1.0f);
             _posY = std::clamp(json.value("posY", 0.9f), 0.0f, 1.0f);
-            _activeSlotCount = std::clamp(json.value("activeSlotCount", 12), 1, 12);
-
-            if (json.contains("bindings") && json["bindings"].is_array()) {
-                _hotkeys.clear();
-                for (const auto& bObj : json["bindings"]) {
-                    HotbarHotkey hb;
-                    if (bObj.contains("keys") && bObj["keys"].is_array()) {
-                        hb.bind.keys = bObj["keys"].get<std::vector<std::uint32_t>>();
-                        hb.bind.Normalize();
-                    }
-                    if (bObj.contains("items") && bObj["items"].is_array()) {
-                        for (const auto& iObj : bObj["items"]) {
-                            HotbarItemId id;
-                            id.form = iObj.value("form", 0u);
-                            id.enchantment = iObj.value("ench", 0u);
-                            id.health = iObj.value("health", 0);
-                            hb.items.push_back(id);
-                        }
-                    }
-                    if (!hb.bind.keys.empty() && !hb.items.empty()) {
-                        _hotkeys.push_back(hb);
+            _presetToggleKey = json.value("presetToggleKey", 45u);
+            _bindModifierKey = json.value("bindModifierKey", 29u);
+            if (json.contains("slotKeys") && json["slotKeys"].is_array()) {
+                for (std::size_t i = 0; i < _slotKeys.size() && i < json["slotKeys"].size(); ++i)
+                    _slotKeys[i] = json["slotKeys"][i].get<std::uint32_t>();
+            }
+            if (json.contains("slots") && json["slots"].is_array()) {
+                for (const auto& slot : json["slots"]) {
+                    const auto index = slot.value("index", -1);
+                    if (index >= 0 && index < static_cast<int>(_slots.size())) {
+                        _slots[index].name = slot.value("name", "Kosong");
+                        _slots[index].formID = slot.value("formID", 0u);
+                        _slots[index].formType = slot.value("formType", 0u);
+                        _slots[index].iconPath = slot.value("iconPath", "");
+                        _slots[index].slotType = slot.value("slotType", 0);
                     }
                 }
             }
-        } catch (...) {}
+        } catch (const std::exception& error) {
+            SKSE::log::error("Failed to load MMOHotbar configuration: {}", error.what());
+        }
     }
 
-    void ExecuteChord(const HotbarChord& a_chord) {
+    void ExecuteAction(int slotIndex)
+    {
         std::scoped_lock lock(_lock);
-
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - _lastActionTime).count() < 250) return;
-        _lastActionTime = now;
-
-        const HotbarHotkey* matched = nullptr;
-        for (const auto& hb : _hotkeys) {
-            if (hb.bind == a_chord) {
-                matched = &hb;
-                break;
-            }
-        }
-        if (!matched || matched->items.empty()) return;
+        if (slotIndex < 0 || slotIndex >= static_cast<int>(_slots.size())) return;
+        auto& slot = _slots[slotIndex];
+        if (slot.formID == 0) return;
 
         auto player = RE::PlayerCharacter::GetSingleton();
+        auto form = RE::TESForm::LookupByID(slot.formID);
         auto equipManager = RE::ActorEquipManager::GetSingleton();
-        if (!player || !equipManager) return;
-
-        const auto& item = matched->items.front();
-        auto* form = RE::TESForm::LookupByID(item.form);
-        if (!form) return;
+        if (!player || !form || !equipManager) return;
 
         if (auto* consumable = form->As<RE::AlchemyItem>()) {
             player->DrinkPotion(consumable, nullptr);
             return;
         }
         if (auto* spell = form->As<RE::SpellItem>()) {
-            auto l = player->GetEquippedObject(true);
-            auto r = player->GetEquippedObject(false);
-            if (l == spell || r == spell) {
-                equipManager->UnequipObject(player, spell, nullptr, 1, nullptr, false);
-            } else {
-                equipManager->EquipSpell(player, spell, nullptr);
-            }
+            equipManager->EquipSpell(player, spell, nullptr);
             return;
         }
         if (auto* shout = form->As<RE::TESShout>()) {
@@ -247,34 +233,29 @@ public:
         }
         if (auto* boundObject = form->As<RE::TESBoundObject>()) {
             bool isEquipped = false;
-            RE::ExtraDataList* extraList = FindInstanceList(boundObject, item);
+            auto equippedLeft = player->GetEquippedObject(true);
+            auto equippedRight = player->GetEquippedObject(false);
 
-            if (player->GetEquippedObject(true) == boundObject || player->GetEquippedObject(false) == boundObject) {
+            if (equippedLeft == boundObject || equippedRight == boundObject) {
                 isEquipped = true;
-            } else if (extraList) {
-                if (extraList->HasType(RE::ExtraDataType::kWorn) || extraList->HasType(RE::ExtraDataType::kWornLeft)) {
-                    isEquipped = true;
-                }
             }
 
             if (isEquipped) {
-                equipManager->UnequipObject(player, boundObject, extraList, 1, nullptr, false);
+                equipManager->UnequipObject(player, boundObject);
             } else {
-                equipManager->EquipObject(player, boundObject, extraList, 1, nullptr, false, false, true, false);
+                equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
             }
         }
     }
 
-    // Fungsi stub yang diperlukan oleh main.cpp
-    void SaveSlotsToSaveGame(SKSE::SerializationInterface*) {}
-    void LoadSlotsFromSaveGame(SKSE::SerializationInterface*) {}
-    void Revert(SKSE::SerializationInterface* = nullptr) { Init(); }
-
 private:
     mutable std::recursive_mutex _lock;
-    std::vector<HotbarHotkey> _hotkeys;
+    std::vector<HotbarSlotData> _slots;
+    std::array<std::uint32_t, 12> _slotKeys{ 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
+    int _currentPreset = 1;
+    int _activeSlotCount = 12;
     float _posX = 0.5f;
     float _posY = 0.9f;
-    int _activeSlotCount = 12;
-    std::chrono::steady_clock::time_point _lastActionTime{ std::chrono::steady_clock::now() };
+    std::uint32_t _presetToggleKey = 45;
+    std::uint32_t _bindModifierKey = 29;
 };
