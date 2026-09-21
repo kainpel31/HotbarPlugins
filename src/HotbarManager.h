@@ -121,7 +121,8 @@ public:
         // PERBAIKAN: Menggunakan pointer langsung '->' karena objDesc bertipe pointer mentah RE::InventoryEntryData*
         if (!selected || !selected->data.objDesc) return false;
 
-        auto* form = selected->data.objDesc->GetObject();
+        auto* entry = selected->data.objDesc;
+        auto* form = entry->GetObject();
         if (!form) return false;
         auto* tesForm = form->As<RE::TESForm>();
         if (!tesForm) return false;
@@ -132,6 +133,30 @@ public:
         _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
         _slots[slotIndex].slotType = 0;
         SaveConfig();
+
+        // Tandai item sebagai favorite betulan (mekanisme native game, bukan hack UI),
+        // supaya bintang favorite vanilla/SkyUI langsung muncul. Dilakukan lewat entry
+        // yang sedang benar-benar dipilih di menu (bukan lewat task queue terpisah),
+        // sehingga aman dipanggil selagi menu Inventory masih terbuka -- tidak men-desync
+        // preview 3D item yang sedang tampil (pola diambil dari STB Hotkey System,
+        // Favorites.cpp::FavoriteSelectedItem).
+        bool alreadyFav = false;
+        RE::ExtraDataList* firstList = nullptr;
+        if (entry->extraLists) {
+            for (auto* xl : *entry->extraLists) {
+                if (!xl) continue;
+                if (!firstList) firstList = xl;
+                if (xl->HasType(RE::ExtraDataType::kHotkey)) { alreadyFav = true; break; }
+            }
+        }
+        if (!alreadyFav) {
+            if (auto* player = RE::PlayerCharacter::GetSingleton()) {
+                if (auto* changes = player->GetInventoryChanges()) {
+                    changes->SetFavorite(entry, firstList);
+                    inventoryList->Update(player);
+                }
+            }
+        }
         return true;
     }
 
@@ -157,6 +182,21 @@ public:
                     _slots[slotIndex].iconPath = ResolveIconPath(tesForm);
                     _slots[slotIndex].slotType = 0;
                     SaveConfig();
+
+                    // Mantra/shout tidak lewat InventoryEntryData -- favoritnya disimpan di
+                    // MagicFavorites (mekanisme native game yang sama dipakai menu Magic).
+                    if (tesForm->Is(RE::FormType::Spell) || tesForm->Is(RE::FormType::Shout)) {
+                        if (auto* mf = RE::MagicFavorites::GetSingleton()) {
+                            mf->SetFavorite(tesForm);
+                        }
+                    }
+                    // Segarkan list yang sedang terbuka supaya bintang langsung terlihat tanpa
+                    // perlu tutup-buka menu (aman: cuma InvalidateData pada list Flash-nya,
+                    // tidak menyentuh internal privat/relocation berisiko).
+                    RE::GFxValue itemList;
+                    if (magicMenu->uiMovie->GetVariable(&itemList, "_root.Menu_mc.inventoryLists.panelContainer.itemList") && itemList.IsObject()) {
+                        itemList.Invoke("InvalidateData");
+                    }
                     return true;
                 }
             }
@@ -225,6 +265,27 @@ public:
         }
     }
 
+    // Mencari ExtraDataList milik stack yang tepat (dipakai/worn atau tidak) untuk objek ini,
+    // supaya EquipObject/UnequipObject menyasar instance yang benar-benar sesuai. Ini pola yang
+    // dipakai game sendiri saat toggle lewat Favorites/hotkey vanilla (bukan hasil tebakan --
+    // diambil dari source asli STB Hotkey System, EquipDispatch.cpp::StackList).
+    // Tanpa extraDataList yang tepat, event OnEquipped/OnUnequipped item bisa tidak menyasar
+    // instance yang benar, dan pada beberapa kasus ikut menyumbang desync animasi.
+    RE::ExtraDataList* FindStackList(RE::Actor* a_actor, RE::TESBoundObject* a_object, bool a_worn) const
+    {
+        auto* changes = a_actor->GetInventoryChanges();
+        if (!changes || !changes->entryList) return nullptr;
+        for (auto* entry : *changes->entryList) {
+            if (!entry || entry->object != a_object || !entry->extraLists) continue;
+            for (auto* xl : *entry->extraLists) {
+                if (!xl) continue;
+                const bool worn = xl->HasType(RE::ExtraDataType::kWorn) || xl->HasType(RE::ExtraDataType::kWornLeft);
+                if (worn == a_worn) return xl;
+            }
+        }
+        return nullptr;
+    }
+
     void ExecuteAction(int slotIndex)
     {
         std::scoped_lock lock(_lock);
@@ -259,11 +320,62 @@ public:
             }
 
             if (isEquipped) {
-                equipManager->UnequipObject(player, boundObject);
+                // PERBAIKAN BUG UTAMA (animasi tidak kembali kosong saat unequip):
+                // 1. Sertakan ExtraDataList stack yang benar-benar "worn" (bukan nullptr),
+                //    persis seperti yang dilakukan game sendiri saat toggle Favorites vanilla.
+                // 2. Panggil Update3DModel() setelah UnequipObject. Ini yang sebelumnya HILANG.
+                //    Skyrim TIDAK otomatis menyegarkan model 3D & state animasi aktor setelah
+                //    equip/unequip "immediate" (non-queued, queueEquip=false) yang dipicu di
+                //    luar alur menu Favorites bawaan -- itu sebabnya mesh menghilang tapi
+                //    behavior graph (animasi "pedang di tangan") tetap membaca state lama.
+                //    Game asli SELALU memanggil Update3DModel tepat setelah equip/unequip
+                //    immediate (lihat FavoritesMenu::UseQuickslotItem / hotkey 1-8 vanilla).
+                auto* xl = FindStackList(player, boundObject, true);
+                equipManager->UnequipObject(player, boundObject, xl, 1, nullptr, false, false, true, false);
             } else {
-                equipManager->EquipObject(player, boundObject, nullptr, 1, nullptr, false, false, true, false);
+                auto* xl = FindStackList(player, boundObject, false);
+                equipManager->EquipObject(player, boundObject, xl, 1, nullptr, false, false, true, false);
+            }
+
+            if (auto* process = player->GetActorRuntimeData().currentProcess) {
+                process->Update3DModel(player);
             }
         }
+    }
+
+    // PERINGATAN KONFLIK TOMBOL (mirip dialog "Key X is already bound to..." di STB Hotkey
+    // System). Mengecek dua sumber konflik:
+    //   (a) slot lain di hotbar kita sendiri, plus tombol toggle-preset & modifier-bind kita,
+    //   (b) kontrol bawaan game (mis. tombol "J" untuk Journal) lewat ControlMap milik game --
+    //       reverse-lookup asli, bukan tabel tebakan sendiri.
+    // Mengembalikan string kosong jika tidak ada konflik, atau pesan penjelasan jika ada.
+    // a_excludeSlot: indeks slot (0-11) yang sedang diedit, supaya tidak dianggap "bentrok
+    // dengan dirinya sendiri"; isi -1 saat mengecek tombol toggle-preset/modifier.
+    std::string DescribeKeyConflict(std::uint32_t a_scancode, int a_excludeSlot = -1) const
+    {
+        if (a_scancode == 0) return {};
+
+        for (int i = 0; i < 12; ++i) {
+            if (i == a_excludeSlot) continue;
+            if (_slotKeys[i] == a_scancode) {
+                return "Sudah dipakai oleh Slot " + std::to_string(i + 1);
+            }
+        }
+        if (_presetToggleKey == a_scancode) {
+            return "Sudah dipakai oleh 'Toggle Preset'";
+        }
+        if (_bindModifierKey == a_scancode) {
+            return "Sudah dipakai oleh 'Bind Modifier'";
+        }
+
+        if (auto* controlMap = RE::ControlMap::GetSingleton()) {
+            const auto name = controlMap->GetUserEventName(
+                a_scancode, RE::INPUT_DEVICE::kKeyboard, RE::UserEvents::INPUT_CONTEXT_ID::kGameplay);
+            if (!name.empty()) {
+                return "Sudah dipakai kontrol game: \"" + std::string(name) + "\" -- keduanya akan sama-sama aktif saat ditekan.";
+            }
+        }
+        return {};
     }
 
 private:

@@ -23,6 +23,64 @@ namespace UIMenu {
         }
     }
 
+    // --- Peringatan konflik tombol (mirip dialog "Assign the hotkey anyway?" di STB Hotkey
+    // System) -- dipakai bersama oleh panel General Settings & Slot Keybinds. ---
+    struct PendingKeyChange {
+        bool active = false;
+        int target = -100;    // >=0: index slot hotbar (0-11); -1: preset toggle; -2: bind modifier
+        std::uint32_t newKey = 0;
+        std::string conflictMsg;
+    };
+    inline PendingKeyChange g_pendingKeyChange;
+    constexpr const char* kKeyConflictPopupId = "Konflik Tombol##MMOHotbarKeyConflict";
+
+    inline void ApplyKeyChange(HotbarManager* manager, int target, std::uint32_t key)
+    {
+        if (target >= 0) manager->SetSlotKey(target, key);
+        else if (target == -1) manager->SetPresetToggleKey(key);
+        else if (target == -2) manager->SetBindModifierKey(key);
+        Save();
+    }
+
+    // Dipanggil setiap kali pemain mengubah sebuah input tombol. Kalau bentrok dengan slot
+    // lain, tombol toggle/modifier kita sendiri, ATAU kontrol bawaan game (mis. "J" untuk
+    // Journal), perubahan TIDAK langsung diterapkan -- munculkan dialog konfirmasi dulu.
+    inline void TryAssignKey(HotbarManager* manager, int target, std::uint32_t key, int excludeSlot)
+    {
+        auto conflict = manager->DescribeKeyConflict(key, excludeSlot);
+        if (conflict.empty()) {
+            ApplyKeyChange(manager, target, key);
+        } else {
+            g_pendingKeyChange = PendingKeyChange{ true, target, key, conflict };
+            ImGui::OpenPopup(kKeyConflictPopupId);
+        }
+    }
+
+    // Panggil ini sekali di akhir setiap panel yang memakai TryAssignKey, supaya popup-nya
+    // punya tempat untuk digambar pada frame yang sama saat OpenPopup dipanggil.
+    inline void RenderKeyConflictPopup(HotbarManager* manager)
+    {
+        if (ImGui::BeginPopupModal(kKeyConflictPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Tombol sudah digunakan");
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", g_pendingKeyChange.conflictMsg.c_str());
+            ImGui::Spacing();
+            ImGui::TextWrapped("Tekan tombol ini nanti dan keduanya akan sama-sama aktif. Tetap pasang?");
+            ImGui::Spacing();
+            if (ImGui::Button("Assign anyway", ImVec2(140, 0))) {
+                ApplyKeyChange(manager, g_pendingKeyChange.target, g_pendingKeyChange.newKey);
+                g_pendingKeyChange = PendingKeyChange{};
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(140, 0))) {
+                g_pendingKeyChange = PendingKeyChange{};
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+    }
+
     namespace BottomBarHint
     {
         struct Target {
@@ -177,20 +235,19 @@ namespace UIMenu {
         
         int toggle = static_cast<int>(manager->GetPresetToggleKey());
         if (ImGui::InputInt("Preset toggle key", &toggle)) {
-            manager->SetPresetToggleKey(static_cast<std::uint32_t>(std::max(toggle, 0)));
-            Save();
+            TryAssignKey(manager, -1, static_cast<std::uint32_t>(std::max(toggle, 0)), -1);
         }
 
         int modifier = static_cast<int>(manager->GetBindModifierKey());
         if (ImGui::InputInt("Bind Modifier Key (Scan Code)", &modifier)) {
-            manager->SetBindModifierKey(static_cast<std::uint32_t>(std::max(modifier, 0)));
-            Save();
+            TryAssignKey(manager, -2, static_cast<std::uint32_t>(std::max(modifier, 0)), -1);
         }
 
         std::string modName = GetModifierName(manager->GetBindModifierKey());
         std::string infoText = "Inventory/Magic Footer Hint: [" + modName + "] Modifier";
         ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "%s", infoText.c_str());
 
+        RenderKeyConflictPopup(manager);
         ImGui::EndChild();
     }
 
@@ -212,11 +269,11 @@ namespace UIMenu {
             int key = static_cast<int>(manager->GetSlotKey(i));
             std::string label = "Slot " + std::to_string(i + 1);
             if (ImGui::InputInt(label.c_str(), &key)) {
-                manager->SetSlotKey(i, static_cast<std::uint32_t>(std::max(key, 0)));
-                Save();
+                TryAssignKey(manager, i, static_cast<std::uint32_t>(std::max(key, 0)), i);
             }
         }
 
+        RenderKeyConflictPopup(manager);
         ImGui::EndChild();
     }
 
